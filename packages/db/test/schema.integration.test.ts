@@ -4,7 +4,7 @@ import { createDb, invoiceBatches, users } from "../src";
 
 const url =
   process.env.DATABASE_URL ??
-  "postgres://moyasar_ops:dev_password@localhost:5432/moyasar_ops";
+  "postgres://moyasar_ops:dev_password@localhost:5433/moyasar_ops";
 const db = createDb(url);
 
 test("inserts and reads a user and a batch with defaults", async () => {
