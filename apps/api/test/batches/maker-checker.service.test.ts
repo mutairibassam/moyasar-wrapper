@@ -107,3 +107,47 @@ describe("approve / reject (maker-checker)", () => {
     ).rejects.toThrow(/cannot be edited/i);
   });
 });
+
+describe("cloneFailed", () => {
+  let repos: FakeRepositories;
+  let service: BatchesService;
+  beforeEach(() => {
+    repos = new FakeRepositories();
+    service = new BatchesService(repos);
+  });
+
+  test("clones invalid rows into a fresh draft batch and audits", async () => {
+    const b = await service.create(maker, { name: "March", currency: "SAR" }, ctx);
+    await service.replaceItems(
+      maker,
+      b.id,
+      [{ amount: 14999, currency: "SAR", description: "ok" }, { amount: 1, currency: "SAR", description: "bad" }],
+      ctx,
+    );
+
+    const clone = await service.cloneFailed(maker, b.id, ctx);
+
+    expect(clone.id).not.toBe(b.id);
+    expect(clone.status).toBe("draft");
+    expect(clone.name).toMatch(/retry/i);
+    expect(clone.items.length).toBe(1);
+    expect(clone.items[0]?.status).toBe("draft");
+    expect(repos.auditRows.some((a) => a.action === "batch.cloned_from_failed")).toBe(true);
+  });
+
+  test("refuses to clone a batch with no invalid or failed rows", async () => {
+    const id = await draftWithValidItems(service);
+    await expect(service.cloneFailed(maker, id, ctx)).rejects.toThrow();
+  });
+
+  test("a viewer cannot clone (role guard)", async () => {
+    const b = await service.create(maker, { name: "March", currency: "SAR" }, ctx);
+    await service.replaceItems(maker, b.id, [{ amount: 1, currency: "SAR", description: "bad" }], ctx);
+    const viewer: PublicUser = { ...maker, id: "v", role: "viewer" };
+    await expect(service.cloneFailed(viewer, b.id, ctx)).rejects.toThrow();
+  });
+
+  test("cloning an unknown batch id throws NotFound", async () => {
+    await expect(service.cloneFailed(maker, "unknown-id", ctx)).rejects.toThrow();
+  });
+});
