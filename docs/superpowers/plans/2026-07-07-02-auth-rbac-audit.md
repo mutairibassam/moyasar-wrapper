@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Spec of record: `docs/superpowers/specs/2026-07-06-moyasar-payment-ops-platform-design.md` (binding sections here: §5 security, §6 roles, §9 audit, §11 API, §12 errors).
+- Spec of record: `docs/superpowers/specs/2026-07-06-moyasar-payment-ops-platform-design.md` (binding sections here: §8 security & roles/RBAC, §9 audit, §11 API surface, §12 error handling).
 - Workspace package names use the `@moyasar-ops/` prefix. TypeScript `strict: true`; no `any` in committed code.
 - **Emails are normalized to lowercase in the service layer** before any lookup or write; the DB unique constraint on `users.email` is the backstop.
 - **Passwords** are hashed with `Bun.password.hash(pw, { algorithm: "argon2id" })` and checked with `Bun.password.verify`. Never store or log plaintext. Minimum password length 12.
