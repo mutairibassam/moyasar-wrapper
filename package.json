@@ -4,6 +4,8 @@
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "test": "bun test",
+    "test:unit": "bun test packages/shared apps/api",
+    "test:db": "bun test packages/db",
     "typecheck": "bunx tsc --noEmit -p packages/shared && bunx tsc --noEmit -p packages/db && bunx tsc --noEmit -p apps/api"
   },
   "devDependencies": {
