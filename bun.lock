@@ -19,6 +19,7 @@
         "zod": "^4.4.3",
       },
       "devDependencies": {
+        "drizzle-orm": "^0.45.2",
         "uuidv7": "^1.2.1",
       },
     },

@@ -1,10 +1,22 @@
 import { describe, expect, test } from "bun:test";
+import { createDb } from "@moyasar-ops/db";
 import { createApp } from "../src/app";
+import { loadConfig } from "../src/config";
+import { createContainer } from "../src/container";
 import { StateTransitionError, ValidationError } from "../src/errors";
+
+// createDb() only opens a lazy connection (postgres-js does not connect until
+// a query runs), so these tests exercise createApp's routing/error-mapping
+// surface without requiring a live database.
+const url =
+  process.env.DATABASE_URL ?? "postgres://moyasar_ops:dev_password@localhost:5433/moyasar_ops";
+const db = createDb(url);
+const config = { ...loadConfig({ DATABASE_URL: url } as NodeJS.ProcessEnv), cookieSecure: false };
+const container = createContainer(db, config);
 
 describe("healthz", () => {
   test("returns ok", async () => {
-    const app = createApp();
+    const app = createApp(container);
     const res = await app.request("/healthz");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok" });
@@ -13,7 +25,7 @@ describe("healthz", () => {
 
 describe("error mapping", () => {
   test("AppError subclasses map to problem+json with their status", async () => {
-    const app = createApp();
+    const app = createApp(container);
     app.get("/boom-validation", () => {
       throw new ValidationError("amount must be an integer", {
         field: "amount",
@@ -39,7 +51,7 @@ describe("error mapping", () => {
   });
 
   test("unexpected errors map to a generic 500 problem without leaking internals", async () => {
-    const app = createApp();
+    const app = createApp(container);
     app.get("/boom-unknown", () => {
       throw new Error("secret database string");
     });
@@ -54,7 +66,7 @@ describe("error mapping", () => {
   });
 
   test("unknown routes return problem+json 404", async () => {
-    const app = createApp();
+    const app = createApp(container);
     const res = await app.request("/nope");
     expect(res.status).toBe(404);
     expect((await res.json()).type).toBe("not_found");
