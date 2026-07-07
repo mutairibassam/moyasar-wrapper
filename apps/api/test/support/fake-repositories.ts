@@ -3,6 +3,13 @@ import type {
   AuditListOptions,
   AuditRow,
   AuditRepository,
+  BatchesRepository,
+  BatchListOptions,
+  BatchRow,
+  ItemRow,
+  ItemsRepository,
+  NewBatchRow,
+  NewItemRow,
   NewSessionRow,
   NewUserRow,
   Repositories,
@@ -17,6 +24,8 @@ export class FakeRepositories implements Repositories {
   userRows: UserRow[] = [];
   sessionRows: SessionRow[] = [];
   auditRows: (AuditEntry & { id: string; createdAt: Date })[] = [];
+  batchRows: BatchRow[] = [];
+  itemRows: ItemRow[] = [];
 
   users: UsersRepository = {
     findById: async (id) => this.userRows.find((u) => u.id === id) ?? null,
@@ -81,6 +90,85 @@ export class FakeRepositories implements Repositories {
         .filter((a) => (opts.action ? a.action === opts.action : true))
         .filter((a) => (opts.entityType ? a.entityType === opts.entityType : true));
       return { items: items as unknown as AuditRow[], total: items.length };
+    },
+  };
+
+  batches: BatchesRepository = {
+    create: async (input: NewBatchRow) => {
+      const row: BatchRow = {
+        id: input.id ?? uuidv7(),
+        name: input.name,
+        status: input.status ?? "draft",
+        source: input.source,
+        mode: input.mode ?? null,
+        currency: input.currency,
+        createdBy: input.createdBy,
+        approvedBy: input.approvedBy ?? null,
+        rejectionComment: input.rejectionComment ?? null,
+        submittedForApprovalAt: input.submittedForApprovalAt ?? null,
+        approvedAt: input.approvedAt ?? null,
+        submittedAt: input.submittedAt ?? null,
+        completedAt: input.completedAt ?? null,
+        itemCount: input.itemCount ?? 0,
+        totalAmount: input.totalAmount ?? 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.batchRows.push(row);
+      return row;
+    },
+    findById: async (id: string) => this.batchRows.find((b) => b.id === id) ?? null,
+    list: async (opts: BatchListOptions) => {
+      const filtered = this.batchRows
+        .filter((b) => (opts.status ? b.status === opts.status : true))
+        .filter((b) => (opts.createdBy ? b.createdBy === opts.createdBy : true));
+      return { items: filtered, total: filtered.length };
+    },
+    update: async (id: string, patch: Partial<NewBatchRow>) => {
+      const b = this.batchRows.find((x) => x.id === id);
+      if (!b) return null;
+      Object.assign(b, patch, { updatedAt: new Date() });
+      return b;
+    },
+  };
+
+  items: ItemsRepository = {
+    listByBatch: async (batchId: string) =>
+      this.itemRows.filter((i) => i.batchId === batchId).sort((a, b) => a.rowNumber - b.rowNumber),
+    deleteByBatch: async (batchId: string) => {
+      this.itemRows = this.itemRows.filter((i) => i.batchId !== batchId);
+    },
+    insertMany: async (rows: NewItemRow[]) => {
+      const created = rows.map((input) => {
+        const row: ItemRow = {
+          id: input.id ?? uuidv7(),
+          batchId: input.batchId,
+          rowNumber: input.rowNumber,
+          amount: input.amount,
+          currency: input.currency,
+          description: input.description,
+          expiredAt: input.expiredAt ?? null,
+          callbackUrl: input.callbackUrl ?? null,
+          successUrl: input.successUrl ?? null,
+          backUrl: input.backUrl ?? null,
+          metadata: input.metadata ?? null,
+          validationErrors: input.validationErrors ?? null,
+          status: input.status ?? "draft",
+          moyasarInvoiceId: input.moyasarInvoiceId ?? null,
+          moyasarStatus: input.moyasarStatus ?? null,
+          moyasarUrl: input.moyasarUrl ?? null,
+          lastSyncedAt: input.lastSyncedAt ?? null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        this.itemRows.push(row);
+        return row;
+      });
+      return created;
+    },
+    countByBatch: async (batchId: string) => {
+      const inBatch = this.itemRows.filter((i) => i.batchId === batchId);
+      return { total: inBatch.length, invalid: inBatch.filter((i) => i.status === "invalid").length };
     },
   };
 

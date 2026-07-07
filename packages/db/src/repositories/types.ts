@@ -1,4 +1,4 @@
-import type { auditLogs, sessions, users } from "../schema";
+import type { auditLogs, invoiceBatches, invoiceItems, sessions, users } from "../schema";
 import type { Db } from "../client";
 
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -9,6 +9,17 @@ export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSessionRow = typeof sessions.$inferInsert;
 export type AuditRow = typeof auditLogs.$inferSelect;
+export type BatchRow = typeof invoiceBatches.$inferSelect;
+export type NewBatchRow = typeof invoiceBatches.$inferInsert;
+export type ItemRow = typeof invoiceItems.$inferSelect;
+export type NewItemRow = typeof invoiceItems.$inferInsert;
+
+export type BatchListOptions = {
+  page: number;
+  perPage: number;
+  status?: BatchRow["status"];
+  createdBy?: string;
+};
 
 export type AuditEntry = {
   actorId: string | null;
@@ -49,9 +60,25 @@ export interface AuditRepository {
   list(opts: AuditListOptions): Promise<{ items: AuditRow[]; total: number }>;
 }
 
+export interface BatchesRepository {
+  create(input: NewBatchRow): Promise<BatchRow>;
+  findById(id: string): Promise<BatchRow | null>;
+  list(opts: BatchListOptions): Promise<{ items: BatchRow[]; total: number }>;
+  update(id: string, patch: Partial<NewBatchRow>): Promise<BatchRow | null>;
+}
+
+export interface ItemsRepository {
+  listByBatch(batchId: string): Promise<ItemRow[]>;
+  deleteByBatch(batchId: string): Promise<void>;
+  insertMany(rows: NewItemRow[]): Promise<ItemRow[]>;
+  countByBatch(batchId: string): Promise<{ total: number; invalid: number }>;
+}
+
 export interface Repositories {
   users: UsersRepository;
   sessions: SessionsRepository;
   audit: AuditRepository;
+  batches: BatchesRepository;
+  items: ItemsRepository;
   transaction<T>(fn: (repos: Repositories) => Promise<T>): Promise<T>;
 }
