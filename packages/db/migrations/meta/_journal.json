@@ -8,6 +8,20 @@
       "when": 1783363753961,
       "tag": "0000_perfect_kat_farrell",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783419730124,
+      "tag": "0001_sessions_indexes_and_settings_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783419740391,
+      "tag": "0002_audit_append_only",
+      "breakpoints": true
     }
   ]
 }
