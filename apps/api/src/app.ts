@@ -6,6 +6,7 @@ import { csrfMiddleware } from "./middleware/csrf";
 import { sessionMiddleware } from "./middleware/session";
 import { auditRoutes } from "./modules/audit/audit.routes";
 import { authRoutes } from "./modules/auth/auth.routes";
+import { batchesRoutes } from "./modules/batches/batches.routes";
 import { usersRoutes } from "./modules/users/users.routes";
 
 type Problem = { type: string; title: string; status: number; detail?: unknown };
@@ -39,6 +40,7 @@ export function createApp(container: Container): Hono<AppEnv> {
   app.route("/api/v1/auth", authRoutes());
   app.route("/api/v1/users", usersRoutes());
   app.route("/api/v1/audit", auditRoutes());
+  app.route("/api/v1/batches", batchesRoutes());
 
   app.get("/api/v1/me", async (c) => {
     const user = c.get("user");
