@@ -207,4 +207,141 @@ export class BatchesService {
     const candidates = result.rows.map((row) => ({ input: row.input, errors: row.errors }));
     return this.writeItems(actor, id, "csv", candidates, ctx);
   }
+
+  async submitForApproval(actor: PublicUser, id: string, ctx: { ip: string | null }): Promise<BatchView> {
+    if (!canWrite(actor)) throw new AuthzError("You do not have permission to submit batches");
+    const batch = await this.repos.batches.findById(id);
+    if (!batch) throw new NotFoundError("Batch not found");
+    if (!EDITABLE_STATUSES.has(batch.status)) {
+      throw new StateTransitionError(`Only a draft or rejected batch can be submitted (it is ${batch.status})`);
+    }
+    const counts = await this.repos.items.countByBatch(id);
+    if (counts.total === 0) throw new ValidationError("A batch needs at least one item before submission");
+    if (counts.invalid > 0) {
+      throw new ValidationError(`The batch has ${counts.invalid} invalid row(s); fix them before submitting`);
+    }
+
+    return this.repos.transaction(async (r) => {
+      await r.batches.update(id, {
+        status: "pending_approval",
+        submittedForApprovalAt: new Date(),
+        rejectionComment: null,
+      });
+      await r.audit.record({
+        actorId: actor.id,
+        action: "batch.submitted_for_approval",
+        entityType: "batch",
+        entityId: id,
+        ip: ctx.ip,
+      });
+      return this.loadViewTx(r, id);
+    });
+  }
+
+  async approve(actor: PublicUser, id: string, ctx: { ip: string | null }): Promise<BatchView> {
+    if (actor.role !== "approver" && actor.role !== "admin") {
+      throw new AuthzError("You do not have permission to approve batches");
+    }
+    const batch = await this.repos.batches.findById(id);
+    if (!batch) throw new NotFoundError("Batch not found");
+    if (batch.status !== "pending_approval") {
+      throw new StateTransitionError(`Only a pending_approval batch can be approved (it is ${batch.status})`);
+    }
+    if (batch.createdBy === actor.id) {
+      throw new AuthzError("You cannot approve your own batch");
+    }
+
+    return this.repos.transaction(async (r) => {
+      const before = { status: batch.status };
+      await r.batches.update(id, {
+        status: "approved",
+        approvedBy: actor.id,
+        approvedAt: new Date(),
+        mode: "test", // active mode is snapshotted here; Plan 4 reads it from settings
+      });
+      await r.audit.record({
+        actorId: actor.id,
+        action: "batch.approved",
+        entityType: "batch",
+        entityId: id,
+        before,
+        after: { status: "approved", approvedBy: actor.id },
+        ip: ctx.ip,
+      });
+      return this.loadViewTx(r, id);
+    });
+  }
+
+  async reject(actor: PublicUser, id: string, comment: string, ctx: { ip: string | null }): Promise<BatchView> {
+    if (actor.role !== "approver" && actor.role !== "admin") {
+      throw new AuthzError("You do not have permission to reject batches");
+    }
+    if (comment.trim() === "") throw new ValidationError("A rejection comment is required");
+    const batch = await this.repos.batches.findById(id);
+    if (!batch) throw new NotFoundError("Batch not found");
+    if (batch.status !== "pending_approval") {
+      throw new StateTransitionError(`Only a pending_approval batch can be rejected (it is ${batch.status})`);
+    }
+    if (batch.createdBy === actor.id) {
+      throw new AuthzError("You cannot reject your own batch");
+    }
+
+    return this.repos.transaction(async (r) => {
+      await r.batches.update(id, { status: "rejected", rejectionComment: comment });
+      await r.audit.record({
+        actorId: actor.id,
+        action: "batch.rejected",
+        entityType: "batch",
+        entityId: id,
+        after: { status: "rejected", comment },
+        ip: ctx.ip,
+      });
+      return this.loadViewTx(r, id);
+    });
+  }
+
+  async cloneFailed(actor: PublicUser, id: string, ctx: { ip: string | null }): Promise<BatchView> {
+    if (!canWrite(actor)) throw new AuthzError("You do not have permission to clone batches");
+    const source = await this.repos.batches.findById(id);
+    if (!source) throw new NotFoundError("Batch not found");
+    const items = await this.repos.items.listByBatch(id);
+    const failed = items.filter((i) => i.status === "invalid" || i.status === "failed");
+    if (failed.length === 0) {
+      throw new ValidationError("This batch has no invalid or failed rows to clone");
+    }
+
+    return this.repos.transaction(async (r) => {
+      const clone = await r.batches.create({
+        name: `${source.name} (retry)`,
+        currency: source.currency,
+        source: source.source,
+        createdBy: actor.id,
+      });
+      const rows = failed.map((item, idx) => ({
+        batchId: clone.id,
+        rowNumber: idx + 1,
+        amount: item.amount,
+        currency: item.currency,
+        description: item.description,
+        expiredAt: item.expiredAt,
+        successUrl: item.successUrl,
+        backUrl: item.backUrl,
+        callbackUrl: item.callbackUrl,
+        metadata: item.metadata,
+        status: "draft" as const,
+        validationErrors: null,
+      }));
+      await r.items.insertMany(rows);
+      await r.batches.update(clone.id, { itemCount: rows.length });
+      await r.audit.record({
+        actorId: actor.id,
+        action: "batch.cloned_from_failed",
+        entityType: "batch",
+        entityId: clone.id,
+        after: { clonedFrom: id, rows: rows.length },
+        ip: ctx.ip,
+      });
+      return this.loadViewTx(r, clone.id);
+    });
+  }
 }
