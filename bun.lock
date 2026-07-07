@@ -17,6 +17,9 @@
         "@moyasar-ops/shared": "workspace:*",
         "hono": "^4.12.28",
       },
+      "devDependencies": {
+        "uuidv7": "^1.2.1",
+      },
     },
     "packages/db": {
       "name": "@moyasar-ops/db",
