@@ -1,4 +1,4 @@
-import type { Repositories } from "@moyasar-ops/db";
+import type { NewUserRow, Repositories } from "@moyasar-ops/db";
 import type { CreateUserInput, UpdateUserInput } from "@moyasar-ops/shared";
 import { AuthzError, NotFoundError, ValidationError } from "../../errors";
 import { hashPassword } from "../auth/password";
@@ -59,7 +59,7 @@ export class UsersService {
       throw new AuthzError("You cannot deactivate your own account");
     }
 
-    const dbPatch: Record<string, unknown> = {};
+    const dbPatch: Partial<NewUserRow> = {};
     if (patch.displayName !== undefined) dbPatch.displayName = patch.displayName;
     if (patch.role !== undefined) dbPatch.role = patch.role;
     if (patch.isActive !== undefined) dbPatch.isActive = patch.isActive;
