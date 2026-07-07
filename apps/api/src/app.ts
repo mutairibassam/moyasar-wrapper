@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Container } from "./container";
-import { AppError } from "./errors";
+import { AppError, AuthnError } from "./errors";
 import type { AppEnv } from "./http-context";
 import { csrfMiddleware } from "./middleware/csrf";
 import { sessionMiddleware } from "./middleware/session";
@@ -42,7 +42,7 @@ export function createApp(container: Container): Hono<AppEnv> {
 
   app.get("/api/v1/me", async (c) => {
     const user = c.get("user");
-    if (!user) return problemResponse({ type: "authentication_error", title: "Authentication required", status: 401 });
+    if (!user) throw new AuthnError("Authentication required");
     return c.json({ user });
   });
 

@@ -13,6 +13,39 @@ const admin: PublicUser = {
 };
 const ctx = { ip: "127.0.0.1" };
 
+describe("UsersService.list", () => {
+  let repos: FakeRepositories;
+  let service: UsersService;
+  beforeEach(() => {
+    repos = new FakeRepositories();
+    service = new UsersService(repos);
+  });
+
+  test("returns public users without passwordHash", async () => {
+    await service.create(
+      admin,
+      { email: "one@example.com", password: "a-strong-password", displayName: "One", role: "maker" },
+      ctx,
+    );
+    await service.create(
+      admin,
+      { email: "two@example.com", password: "a-strong-password", displayName: "Two", role: "viewer" },
+      ctx,
+    );
+
+    const users = await service.list();
+
+    expect(users).toHaveLength(2);
+    for (const u of users) {
+      expect((u as Record<string, unknown>).passwordHash).toBeUndefined();
+    }
+    const one = users.find((u) => u.email === "one@example.com")!;
+    const two = users.find((u) => u.email === "two@example.com")!;
+    expect(one.role).toBe("maker");
+    expect(two.role).toBe("viewer");
+  });
+});
+
 describe("UsersService.create", () => {
   let repos: FakeRepositories;
   let service: UsersService;
