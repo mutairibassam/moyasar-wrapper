@@ -1,0 +1,1 @@
+ALTER TABLE "invoice_items" ADD CONSTRAINT "invoice_items_batch_row_unique" UNIQUE("batch_id","row_number");

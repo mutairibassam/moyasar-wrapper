@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import { uuidv7 } from "uuidv7";
@@ -97,5 +98,6 @@ export const invoiceItems = pgTable(
     index("idx_items_batch").on(t.batchId),
     index("idx_items_moyasar_id").on(t.moyasarInvoiceId),
     index("idx_items_status").on(t.status),
+    unique("invoice_items_batch_row_unique").on(t.batchId, t.rowNumber),
   ],
 );
