@@ -64,7 +64,11 @@ export interface BatchesRepository {
   create(input: NewBatchRow): Promise<BatchRow>;
   findById(id: string): Promise<BatchRow | null>;
   list(opts: BatchListOptions): Promise<{ items: BatchRow[]; total: number }>;
-  update(id: string, patch: Partial<NewBatchRow>): Promise<BatchRow | null>;
+  update(
+    id: string,
+    patch: Partial<NewBatchRow>,
+    expectedStatus?: BatchRow["status"],
+  ): Promise<BatchRow | null>;
 }
 
 export interface ItemsRepository {

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { createDb, createRepositories, invoiceBatches, invoiceItems, sessions, users, auditLogs } from "@moyasar-ops/db";
+import { createDb, createRepositories, invoiceBatches, invoiceItems, sessions } from "@moyasar-ops/db";
 import { eq, inArray } from "drizzle-orm";
 import { createApp } from "../../src/app";
 import { loadConfig } from "../../src/config";

@@ -253,12 +253,17 @@ export class BatchesService {
 
     return this.repos.transaction(async (r) => {
       const before = { status: batch.status };
-      await r.batches.update(id, {
-        status: "approved",
-        approvedBy: actor.id,
-        approvedAt: new Date(),
-        mode: "test", // active mode is snapshotted here; Plan 4 reads it from settings
-      });
+      const updated = await r.batches.update(
+        id,
+        {
+          status: "approved",
+          approvedBy: actor.id,
+          approvedAt: new Date(),
+          mode: "test", // active mode is snapshotted here; Plan 4 reads it from settings
+        },
+        "pending_approval",
+      );
+      if (!updated) throw new StateTransitionError("Batch is no longer pending approval");
       await r.audit.record({
         actorId: actor.id,
         action: "batch.approved",
@@ -287,12 +292,19 @@ export class BatchesService {
     }
 
     return this.repos.transaction(async (r) => {
-      await r.batches.update(id, { status: "rejected", rejectionComment: comment });
+      const before = { status: batch.status };
+      const updated = await r.batches.update(
+        id,
+        { status: "rejected", rejectionComment: comment },
+        "pending_approval",
+      );
+      if (!updated) throw new StateTransitionError("Batch is no longer pending approval");
       await r.audit.record({
         actorId: actor.id,
         action: "batch.rejected",
         entityType: "batch",
         entityId: id,
+        before,
         after: { status: "rejected", comment },
         ip: ctx.ip,
       });

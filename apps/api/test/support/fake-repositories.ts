@@ -124,9 +124,10 @@ export class FakeRepositories implements Repositories {
         .filter((b) => (opts.createdBy ? b.createdBy === opts.createdBy : true));
       return { items: filtered, total: filtered.length };
     },
-    update: async (id: string, patch: Partial<NewBatchRow>) => {
+    update: async (id: string, patch: Partial<NewBatchRow>, expectedStatus?: BatchRow["status"]) => {
       const b = this.batchRows.find((x) => x.id === id);
       if (!b) return null;
+      if (expectedStatus !== undefined && b.status !== expectedStatus) return null;
       Object.assign(b, patch, { updatedAt: new Date() });
       return b;
     },

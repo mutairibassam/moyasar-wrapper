@@ -44,11 +44,19 @@ export class DrizzleBatchesRepository implements BatchesRepository {
     return { items, total: row?.value ?? 0 };
   }
 
-  async update(id: string, patch: Partial<NewBatchRow>): Promise<BatchRow | null> {
+  async update(
+    id: string,
+    patch: Partial<NewBatchRow>,
+    expectedStatus?: BatchRow["status"],
+  ): Promise<BatchRow | null> {
+    const where =
+      expectedStatus === undefined
+        ? eq(invoiceBatches.id, id)
+        : and(eq(invoiceBatches.id, id), eq(invoiceBatches.status, expectedStatus));
     const [row] = await this.db
       .update(invoiceBatches)
       .set({ ...patch, updatedAt: new Date() })
-      .where(eq(invoiceBatches.id, id))
+      .where(where)
       .returning();
     return row ?? null;
   }
