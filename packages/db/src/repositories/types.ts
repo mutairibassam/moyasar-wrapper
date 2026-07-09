@@ -1,4 +1,4 @@
-import type { auditLogs, invoiceBatches, invoiceItems, sessions, users } from "../schema";
+import type { appSettings, auditLogs, invoiceBatches, invoiceItems, sessions, users } from "../schema";
 import type { Db } from "../client";
 
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -13,6 +13,8 @@ export type BatchRow = typeof invoiceBatches.$inferSelect;
 export type NewBatchRow = typeof invoiceBatches.$inferInsert;
 export type ItemRow = typeof invoiceItems.$inferSelect;
 export type NewItemRow = typeof invoiceItems.$inferInsert;
+export type SettingsRow = typeof appSettings.$inferSelect;
+export type NewSettingsRow = typeof appSettings.$inferInsert;
 
 export type BatchListOptions = {
   page: number;
@@ -78,11 +80,17 @@ export interface ItemsRepository {
   countByBatch(batchId: string): Promise<{ total: number; invalid: number }>;
 }
 
+export interface SettingsRepository {
+  get(): Promise<SettingsRow>;
+  update(patch: Partial<NewSettingsRow>): Promise<SettingsRow>;
+}
+
 export interface Repositories {
   users: UsersRepository;
   sessions: SessionsRepository;
   audit: AuditRepository;
   batches: BatchesRepository;
   items: ItemsRepository;
+  settings: SettingsRepository;
   transaction<T>(fn: (repos: Repositories) => Promise<T>): Promise<T>;
 }

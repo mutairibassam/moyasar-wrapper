@@ -11,10 +11,13 @@ import type {
   NewBatchRow,
   NewItemRow,
   NewSessionRow,
+  NewSettingsRow,
   NewUserRow,
   Repositories,
   SessionRow,
   SessionsRepository,
+  SettingsRepository,
+  SettingsRow,
   UserRow,
   UsersRepository,
 } from "@moyasar-ops/db";
@@ -26,6 +29,15 @@ export class FakeRepositories implements Repositories {
   auditRows: (AuditEntry & { id: string; createdAt: Date })[] = [];
   batchRows: BatchRow[] = [];
   itemRows: ItemRow[] = [];
+  settingsRow: SettingsRow = {
+    id: 1,
+    moyasarTestKeyEnc: null,
+    moyasarLiveKeyEnc: null,
+    webhookSecretEnc: null,
+    activeMode: "test",
+    updatedBy: null,
+    updatedAt: new Date(),
+  };
 
   users: UsersRepository = {
     findById: async (id) => this.userRows.find((u) => u.id === id) ?? null,
@@ -170,6 +182,14 @@ export class FakeRepositories implements Repositories {
     countByBatch: async (batchId: string) => {
       const inBatch = this.itemRows.filter((i) => i.batchId === batchId);
       return { total: inBatch.length, invalid: inBatch.filter((i) => i.status === "invalid").length };
+    },
+  };
+
+  settings: SettingsRepository = {
+    get: async () => this.settingsRow,
+    update: async (patch: Partial<NewSettingsRow>) => {
+      this.settingsRow = { ...this.settingsRow, ...patch, updatedAt: new Date() };
+      return this.settingsRow;
     },
   };
 
