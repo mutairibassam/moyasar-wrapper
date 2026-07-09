@@ -2,6 +2,7 @@ import type { Db } from "../client";
 import { DrizzleAuditRepository } from "./audit.repository";
 import { DrizzleBatchesRepository } from "./batches.repository";
 import { DrizzleItemsRepository } from "./items.repository";
+import { DrizzleJobsRepository } from "./jobs.repository";
 import { DrizzleSessionsRepository } from "./sessions.repository";
 import { DrizzleSettingsRepository } from "./settings.repository";
 import { DrizzleUsersRepository } from "./users.repository";
@@ -17,6 +18,7 @@ function build(executor: Executor, root: Db): Repositories {
     batches: new DrizzleBatchesRepository(executor),
     items: new DrizzleItemsRepository(executor),
     settings: new DrizzleSettingsRepository(executor),
+    jobs: new DrizzleJobsRepository(executor),
     transaction<T>(fn: (repos: Repositories) => Promise<T>): Promise<T> {
       if (executor === root) {
         return root.transaction((tx) => fn(build(tx, root)));

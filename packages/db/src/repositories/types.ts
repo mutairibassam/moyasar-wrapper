@@ -1,4 +1,4 @@
-import type { appSettings, auditLogs, invoiceBatches, invoiceItems, sessions, users } from "../schema";
+import type { appSettings, auditLogs, invoiceBatches, invoiceItems, jobs, sessions, users } from "../schema";
 import type { Db } from "../client";
 
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -15,6 +15,7 @@ export type ItemRow = typeof invoiceItems.$inferSelect;
 export type NewItemRow = typeof invoiceItems.$inferInsert;
 export type SettingsRow = typeof appSettings.$inferSelect;
 export type NewSettingsRow = typeof appSettings.$inferInsert;
+export type JobRow = typeof jobs.$inferSelect;
 
 export type BatchListOptions = {
   page: number;
@@ -85,6 +86,14 @@ export interface SettingsRepository {
   update(patch: Partial<NewSettingsRow>): Promise<SettingsRow>;
 }
 
+export interface JobsRepository {
+  enqueue(type: "submit_batch" | "sync_invoices", payload: Record<string, unknown>): Promise<JobRow>;
+  claimNext(workerId: string): Promise<JobRow | null>;
+  complete(id: string): Promise<void>;
+  fail(id: string, error: string, retryInMs: number | null): Promise<void>;
+  listDead(): Promise<JobRow[]>;
+}
+
 export interface Repositories {
   users: UsersRepository;
   sessions: SessionsRepository;
@@ -92,5 +101,6 @@ export interface Repositories {
   batches: BatchesRepository;
   items: ItemsRepository;
   settings: SettingsRepository;
+  jobs: JobsRepository;
   transaction<T>(fn: (repos: Repositories) => Promise<T>): Promise<T>;
 }

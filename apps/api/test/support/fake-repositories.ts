@@ -8,6 +8,8 @@ import type {
   BatchRow,
   ItemRow,
   ItemsRepository,
+  JobRow,
+  JobsRepository,
   NewBatchRow,
   NewItemRow,
   NewSessionRow,
@@ -29,6 +31,7 @@ export class FakeRepositories implements Repositories {
   auditRows: (AuditEntry & { id: string; createdAt: Date })[] = [];
   batchRows: BatchRow[] = [];
   itemRows: ItemRow[] = [];
+  jobRows: JobRow[] = [];
   settingsRow: SettingsRow = {
     id: 1,
     moyasarTestKeyEnc: null,
@@ -191,6 +194,60 @@ export class FakeRepositories implements Repositories {
       this.settingsRow = { ...this.settingsRow, ...patch, updatedAt: new Date() };
       return this.settingsRow;
     },
+  };
+
+  jobs: JobsRepository = {
+    enqueue: async (type: "submit_batch" | "sync_invoices", payload: Record<string, unknown>) => {
+      const row: JobRow = {
+        id: uuidv7(),
+        type,
+        payload,
+        status: "pending",
+        attempts: 0,
+        maxAttempts: 5,
+        runAt: new Date(),
+        lockedAt: null,
+        lockedBy: null,
+        lastError: null,
+        createdAt: new Date(),
+      };
+      this.jobRows.push(row);
+      return row;
+    },
+    claimNext: async (workerId: string) => {
+      const now = Date.now();
+      const candidates = this.jobRows
+        .filter((j) => j.status === "pending" && j.runAt.getTime() <= now)
+        .sort((a, b) => a.runAt.getTime() - b.runAt.getTime());
+      const job = candidates[0];
+      if (!job) return null;
+      job.status = "running";
+      job.lockedAt = new Date();
+      job.lockedBy = workerId;
+      job.attempts += 1;
+      return job;
+    },
+    complete: async (id: string) => {
+      const job = this.jobRows.find((j) => j.id === id);
+      if (!job) return;
+      job.status = "done";
+      job.lockedAt = null;
+      job.lockedBy = null;
+    },
+    fail: async (id: string, error: string, retryInMs: number | null) => {
+      const job = this.jobRows.find((j) => j.id === id);
+      if (!job) return;
+      job.lastError = error;
+      job.lockedAt = null;
+      job.lockedBy = null;
+      if (retryInMs === null) {
+        job.status = "failed";
+        return;
+      }
+      job.status = "pending";
+      job.runAt = new Date(Date.now() + retryInMs);
+    },
+    listDead: async () => this.jobRows.filter((j) => j.status === "failed"),
   };
 
   async transaction<T>(fn: (repos: Repositories) => Promise<T>): Promise<T> {
