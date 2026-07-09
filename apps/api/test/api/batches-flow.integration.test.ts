@@ -8,7 +8,13 @@ import { hashPassword } from "../../src/modules/auth/password";
 
 const url = process.env.DATABASE_URL ?? "postgres://moyasar_ops:dev_password@localhost:5433/moyasar_ops";
 const db = createDb(url);
-const config = { ...loadConfig({ DATABASE_URL: url } as NodeJS.ProcessEnv), cookieSecure: false };
+const config = {
+  ...loadConfig({
+    DATABASE_URL: url,
+    KEY_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+  } as NodeJS.ProcessEnv),
+  cookieSecure: false,
+};
 const app = createApp(createContainer(db, config));
 
 const stamp = Date.now();

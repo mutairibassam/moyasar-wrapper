@@ -14,6 +14,9 @@ const configSchema = z.object({
   cookieSecure: boolFromString,
   loginRateMax: z.coerce.number().int().default(5),
   loginRateWindowMinutes: z.coerce.number().int().default(15),
+  keyEncryptionKey: z.string().min(1, "KEY_ENCRYPTION_KEY is required"),
+  moyasarBaseUrl: z.string().min(1).default("https://api.moyasar.com/v1"),
+  jobPollIntervalMs: z.coerce.number().int().default(2000),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -26,6 +29,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure: env.COOKIE_SECURE,
     loginRateMax: env.LOGIN_RATE_MAX,
     loginRateWindowMinutes: env.LOGIN_RATE_WINDOW_MINUTES,
+    keyEncryptionKey: env.KEY_ENCRYPTION_KEY,
+    moyasarBaseUrl: env.MOYASAR_BASE_URL,
+    jobPollIntervalMs: env.JOB_POLL_INTERVAL_MS,
   });
   if (!parsed.success) {
     throw new Error(`Invalid configuration: ${parsed.error.message}`);
