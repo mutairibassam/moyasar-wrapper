@@ -79,6 +79,10 @@ export interface ItemsRepository {
   deleteByBatch(batchId: string): Promise<void>;
   insertMany(rows: NewItemRow[]): Promise<ItemRow[]>;
   countByBatch(batchId: string): Promise<{ total: number; invalid: number }>;
+  markSubmitting(itemIds: string[]): Promise<void>;
+  recordSubmitted(itemId: string, moyasar: { id: string; url: string | null; status: string }): Promise<void>;
+  recordFailed(itemId: string, error: string): Promise<void>;
+  listByBatchAndStatus(batchId: string, status: ItemRow["status"]): Promise<ItemRow[]>;
 }
 
 export interface SettingsRepository {

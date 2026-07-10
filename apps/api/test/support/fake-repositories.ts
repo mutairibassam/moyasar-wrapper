@@ -186,6 +186,36 @@ export class FakeRepositories implements Repositories {
       const inBatch = this.itemRows.filter((i) => i.batchId === batchId);
       return { total: inBatch.length, invalid: inBatch.filter((i) => i.status === "invalid").length };
     },
+    markSubmitting: async (itemIds: string[]) => {
+      const ids = new Set(itemIds);
+      for (const item of this.itemRows) {
+        if (ids.has(item.id)) {
+          item.status = "submitting";
+          item.updatedAt = new Date();
+        }
+      }
+    },
+    recordSubmitted: async (itemId: string, moyasar: { id: string; url: string | null; status: string }) => {
+      const item = this.itemRows.find((i) => i.id === itemId);
+      if (!item) return;
+      item.status = "submitted";
+      item.moyasarInvoiceId = moyasar.id;
+      item.moyasarUrl = moyasar.url;
+      item.moyasarStatus = moyasar.status as ItemRow["moyasarStatus"];
+      item.lastSyncedAt = new Date();
+      item.updatedAt = new Date();
+    },
+    recordFailed: async (itemId: string, error: string) => {
+      const item = this.itemRows.find((i) => i.id === itemId);
+      if (!item) return;
+      item.status = "failed";
+      item.validationErrors = { submission: [error] };
+      item.updatedAt = new Date();
+    },
+    listByBatchAndStatus: async (batchId: string, status: ItemRow["status"]) =>
+      this.itemRows
+        .filter((i) => i.batchId === batchId && i.status === status)
+        .sort((a, b) => a.rowNumber - b.rowNumber),
   };
 
   settings: SettingsRepository = {
