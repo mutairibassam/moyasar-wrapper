@@ -214,6 +214,87 @@ describe("SubmissionEngine.submitBatch", () => {
     expect(sent.metadata.order_ref).toBe("PO-1");
   });
 
+  test("crash-orphaned submitting item is re-sent", async () => {
+    const repos = new FakeRepositories();
+    const { batch } = await seedBatch(repos, { itemCount: 0, status: "submitting" });
+    const [itemA, itemB] = await repos.items.insertMany([
+      {
+        batchId: batch.id,
+        rowNumber: 1,
+        amount: 1000,
+        currency: "SAR",
+        description: "Item A (already created at Moyasar)",
+        status: "submitted" as const,
+        validationErrors: null,
+        moyasarInvoiceId: "inv_existing_a",
+      },
+      {
+        batchId: batch.id,
+        rowNumber: 2,
+        amount: 2000,
+        currency: "SAR",
+        description: "Item B (crash-orphaned, never actually created)",
+        status: "submitting" as const,
+        validationErrors: null,
+      },
+    ]);
+    const client = new FakeClient();
+    // Only A's invoice exists at Moyasar; B was never actually created.
+    client.preExisting = [
+      {
+        id: "inv_existing_a",
+        status: "initiated",
+        amount: itemA!.amount,
+        currency: itemA!.currency,
+        description: itemA!.description,
+        url: "https://pay/existing_a",
+        metadata: { platform_item_id: itemA!.id, platform_batch_id: batch.id },
+      },
+    ];
+    const engine = new SubmissionEngine({ repos, client });
+
+    await engine.submitBatch(batch.id);
+
+    const allSentItemIds = client.createBulkCalls.flat().map((i) => i.metadata.platform_item_id);
+    expect(allSentItemIds).not.toContain(itemA!.id);
+    expect(allSentItemIds).toEqual([itemB!.id]);
+
+    const finalItems = await repos.items.listByBatch(batch.id);
+    const finalA = finalItems.find((i) => i.id === itemA!.id)!;
+    const finalB = finalItems.find((i) => i.id === itemB!.id)!;
+    expect(finalA.status).toBe("submitted");
+    expect(finalA.moyasarInvoiceId).toBe("inv_existing_a");
+    expect(finalB.status).toBe("submitted");
+    expect(finalB.moyasarInvoiceId).toBe(`inv_${itemB!.id}`);
+
+    const finalBatch = await repos.batches.findById(batch.id);
+    expect(finalBatch!.status).toBe("submitted");
+  });
+
+  test("partial 201 leaves an item submitting and forces a retry", async () => {
+    const repos = new FakeRepositories();
+    const { batch, items } = await seedBatch(repos, { itemCount: 2 });
+    const [itemA, itemB] = items;
+    const client = new FakeClient();
+    client.onCreateBulk = (invoices) => {
+      // Simulate a partial 201: only return an invoice for the first item.
+      return invoices.filter((i) => i.metadata.platform_item_id === itemA!.id).map((i) => makeInvoice(i));
+    };
+    const engine = new SubmissionEngine({ repos, client });
+
+    await expect(engine.submitBatch(batch.id)).rejects.toThrow(MoyasarApiError);
+
+    const finalItems = await repos.items.listByBatch(batch.id);
+    const finalA = finalItems.find((i) => i.id === itemA!.id)!;
+    const finalB = finalItems.find((i) => i.id === itemB!.id)!;
+    expect(finalA.status).toBe("submitted");
+    expect(finalB.status).toBe("submitting");
+    expect(finalB.status).not.toBe("failed");
+
+    const finalBatch = await repos.batches.findById(batch.id);
+    expect(finalBatch!.status).toBe("submitting");
+  });
+
   test("idempotent no-op: already-submitted batch returns without calling the client", async () => {
     const repos = new FakeRepositories();
     const { batch } = await seedBatch(repos, { itemCount: 1, status: "submitted" });

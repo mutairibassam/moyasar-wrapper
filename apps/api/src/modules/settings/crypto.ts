@@ -3,12 +3,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 export class CryptoError extends Error {}
 
 function keyBytes(keyB64: string): Buffer {
-  let key: Buffer;
-  try {
-    key = Buffer.from(keyB64, "base64");
-  } catch {
-    throw new CryptoError("KEY_ENCRYPTION_KEY is not valid base64");
-  }
+  const key = Buffer.from(keyB64, "base64");
   if (key.length !== 32) {
     throw new CryptoError("KEY_ENCRYPTION_KEY must decode to 32 bytes (AES-256)");
   }

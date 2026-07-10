@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { jobs } from "../schema";
 import type { Executor, JobRow, JobsRepository } from "./types";
 
@@ -48,6 +48,6 @@ export class DrizzleJobsRepository implements JobsRepository {
   }
 
   async listDead(): Promise<JobRow[]> {
-    return this.db.select().from(jobs).where(and(eq(jobs.status, "failed")));
+    return this.db.select().from(jobs).where(eq(jobs.status, "failed"));
   }
 }

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { createDb, createRepositories, invoiceBatches, invoiceItems, sessions } from "@moyasar-ops/db";
-import { eq, inArray } from "drizzle-orm";
+import { createDb, createRepositories, invoiceBatches, invoiceItems, jobs, sessions } from "@moyasar-ops/db";
+import { eq, inArray, sql } from "drizzle-orm";
 import { createApp } from "../../src/app";
 import { loadConfig } from "../../src/config";
 import { createContainer } from "../../src/container";
@@ -133,6 +133,9 @@ test("CSV upload validates rows and blocks submission until fixed", async () => 
 afterAll(async () => {
   const bIds = (await db.select({ id: invoiceBatches.id }).from(invoiceBatches).where(inArray(invoiceBatches.createdBy, ids))).map((r) => r.id);
   if (bIds.length > 0) {
+    // Approving a batch enqueues a submit_batch job ({ batchId }) — clean those up too, scoped to
+    // the batch ids this test created, so we never truncate the whole jobs table.
+    await db.delete(jobs).where(inArray(sql<string>`${jobs.payload}->>'batchId'`, bIds));
     await db.delete(invoiceItems).where(inArray(invoiceItems.batchId, bIds));
     await db.delete(invoiceBatches).where(inArray(invoiceBatches.id, bIds));
   }

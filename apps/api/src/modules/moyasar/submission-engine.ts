@@ -8,6 +8,7 @@ export interface SubmissionClient {
 }
 
 const CHUNK_SIZE = 50;
+const MAX_RECONCILE_PAGES = 1000;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -62,8 +63,12 @@ export class SubmissionEngine {
     // Reconcile first, always — heals anything created by a prior (crashed) run.
     await this.reconcile(batchId);
 
-    const pending = (await this.repos.items.listByBatchAndStatus(batchId, "valid")).filter(
-      (item) => !item.moyasarInvoiceId,
+    // Re-send queue: anything not yet confirmed created at Moyasar. This includes items left
+    // "submitting" by a prior crashed run that reconcile just checked for and did NOT find
+    // (i.e. never actually created) — without this, such items are silently orphaned forever.
+    const allItems = await this.repos.items.listByBatch(batchId);
+    const pending = allItems.filter(
+      (item) => (item.status === "valid" || item.status === "submitting") && !item.moyasarInvoiceId,
     );
     const chunks = chunk(pending, CHUNK_SIZE);
 
@@ -114,6 +119,8 @@ export class SubmissionEngine {
     if (candidates.size === 0) return;
 
     let page = 1;
+    let pagesFetched = 0;
+    let previousPage = 0;
     for (;;) {
       const { invoices, nextPage } = await this.client.listByBatch(batchId, page);
       for (const invoice of invoices) {
@@ -127,6 +134,15 @@ export class SubmissionEngine {
         }
       }
       if (nextPage === null) break;
+      pagesFetched += 1;
+      if (pagesFetched >= MAX_RECONCILE_PAGES || nextPage <= previousPage) {
+        throw new MoyasarApiError(
+          `reconcile exceeded ${MAX_RECONCILE_PAGES} pages or received a non-increasing next_page; aborting`,
+          undefined,
+          true,
+        );
+      }
+      previousPage = page;
       page = nextPage;
     }
   }
@@ -134,6 +150,19 @@ export class SubmissionEngine {
   private async finalize(batchId: string): Promise<void> {
     await this.repos.transaction(async (r) => {
       const items = await r.items.listByBatch(batchId);
+      const stillSubmitting = items.filter((i) => i.status === "submitting");
+
+      if (stillSubmitting.length > 0) {
+        // At least one item could not be confirmed created this run (partial-201 omission or a
+        // genuinely-missing item). Do not finalize the batch — throw so the JobRunner retries;
+        // the next run's reconcile heals whatever actually got created and re-sends the rest.
+        throw new MoyasarApiError(
+          `${stillSubmitting.length} invoice(s) could not be confirmed created; will retry`,
+          undefined,
+          true,
+        );
+      }
+
       const relevant = items.filter((i) => i.status === "submitted" || i.status === "failed");
       const allSubmitted = relevant.length > 0 && relevant.every((i) => i.status === "submitted");
       const hasFailed = relevant.some((i) => i.status === "failed");
@@ -155,7 +184,6 @@ export class SubmissionEngine {
           entityId: batchId,
         });
       }
-      // else: some items still submitting (shouldn't happen without a rethrow) — leave batch as submitting.
     });
   }
 }
