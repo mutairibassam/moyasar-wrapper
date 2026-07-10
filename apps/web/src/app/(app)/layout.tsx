@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { AppShell } from "@/components/app-shell";
 import { useSession } from "@/lib/auth/use-session";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -13,5 +14,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isLoading || !user) {
     return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
   }
-  return <>{children}</>; // AppShell wraps this in Task 4
+  return <AppShell>{children}</AppShell>;
 }
