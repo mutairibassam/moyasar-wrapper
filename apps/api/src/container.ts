@@ -47,6 +47,10 @@ export function createContainer(db: Db, config: Config, moyasarFetch?: typeof fe
     const engine = new SubmissionEngine({ repos, client });
     await engine.submitBatch(payload.batchId as string);
   };
+  // Self-rescheduling recurring job: poll open invoices, then enqueue the next run.
+  // Assumes a SINGLE runner instance (MVP Compose deployment). Running multiple API
+  // instances would double-enqueue this chain; multi-instance needs a scheduler lock
+  // (e.g. a unique-pending constraint) — see Plan 6 / horizontal-scale notes.
   const syncInvoicesHandler: JobHandler = async () => {
     const client = await makeMoyasarClient();
     await new SyncEngine({ repos, client }).syncOpenInvoices();
