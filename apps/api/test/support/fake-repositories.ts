@@ -6,6 +6,7 @@ import type {
   BatchesRepository,
   BatchListOptions,
   BatchRow,
+  InvoiceQuery,
   ItemRow,
   ItemsRepository,
   JobRow,
@@ -216,6 +217,28 @@ export class FakeRepositories implements Repositories {
       this.itemRows
         .filter((i) => i.batchId === batchId && i.status === status)
         .sort((a, b) => a.rowNumber - b.rowNumber),
+    listOpenSubmitted: async () =>
+      this.itemRows.filter((i) => i.moyasarInvoiceId !== null && (i.moyasarStatus === "initiated" || i.moyasarStatus === "on_hold")),
+    syncStatus: async (itemId: string, moyasarStatus: NonNullable<ItemRow["moyasarStatus"]>) => {
+      const i = this.itemRows.find((x) => x.id === itemId);
+      if (i) {
+        i.moyasarStatus = moyasarStatus;
+        i.lastSyncedAt = new Date();
+        i.updatedAt = new Date();
+      }
+    },
+    findByMoyasarInvoiceId: async (mid: string) => this.itemRows.find((i) => i.moyasarInvoiceId === mid) ?? null,
+    queryInvoices: async (opts: InvoiceQuery) => {
+      const filtered = this.itemRows
+        .filter((i) => i.moyasarInvoiceId !== null)
+        .filter((i) => (opts.moyasarStatus ? i.moyasarStatus === opts.moyasarStatus : true))
+        .filter((i) => (opts.batchId ? i.batchId === opts.batchId : true))
+        .filter((i) => (opts.createdAfter ? i.createdAt >= opts.createdAfter : true))
+        .filter((i) => (opts.createdBefore ? i.createdAt <= opts.createdBefore : true))
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const start = (opts.page - 1) * opts.perPage;
+      return { items: filtered.slice(start, start + opts.perPage), total: filtered.length };
+    },
   };
 
   settings: SettingsRepository = {
