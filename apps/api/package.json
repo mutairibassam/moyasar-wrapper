@@ -1,0 +1,15 @@
+{
+  "name": "@moyasar-ops/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "@moyasar-ops/shared": "workspace:*",
+    "@moyasar-ops/db": "workspace:*",
+    "hono": "^4.12.28"
+  }
+}
