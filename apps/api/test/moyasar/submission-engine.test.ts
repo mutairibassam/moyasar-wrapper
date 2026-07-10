@@ -186,6 +186,34 @@ describe("SubmissionEngine.submitBatch", () => {
     expect(finalBatch!.status).toBe("submitting");
   });
 
+  test("reserved metadata keys win over hostile user-supplied metadata", async () => {
+    const repos = new FakeRepositories();
+    const { batch } = await seedBatch(repos, { itemCount: 0 });
+    const [item] = await repos.items.insertMany([
+      {
+        batchId: batch.id,
+        rowNumber: 1,
+        amount: 1500,
+        currency: "SAR",
+        description: "Hostile metadata item",
+        status: "valid" as const,
+        validationErrors: null,
+        metadata: { platform_item_id: "USER-SUPPLIED-BOGUS", order_ref: "PO-1" },
+      },
+    ]);
+    const client = new FakeClient();
+    const engine = new SubmissionEngine({ repos, client });
+
+    await engine.submitBatch(batch.id);
+
+    expect(client.createBulkCalls).toHaveLength(1);
+    const sent = client.createBulkCalls[0]![0]!;
+    expect(sent.metadata.platform_item_id).toBe(item!.id);
+    expect(sent.metadata.platform_item_id).not.toBe("USER-SUPPLIED-BOGUS");
+    expect(sent.metadata.platform_batch_id).toBe(batch.id);
+    expect(sent.metadata.order_ref).toBe("PO-1");
+  });
+
   test("idempotent no-op: already-submitted batch returns without calling the client", async () => {
     const repos = new FakeRepositories();
     const { batch } = await seedBatch(repos, { itemCount: 1, status: "submitted" });

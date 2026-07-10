@@ -23,9 +23,9 @@ function buildInvoiceInput(item: ItemRow, batchId: string): BulkInvoiceInput {
     currency: item.currency,
     description: item.description,
     metadata: {
+      ...(item.metadata ?? {}),
       platform_item_id: item.id,
       platform_batch_id: batchId,
-      ...(item.metadata ?? {}),
     },
   };
   if (item.expiredAt) input.expired_at = item.expiredAt;
