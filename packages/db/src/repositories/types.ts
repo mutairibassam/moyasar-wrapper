@@ -105,10 +105,12 @@ export interface SettingsRepository {
 
 export interface JobsRepository {
   enqueue(type: "submit_batch" | "sync_invoices", payload: Record<string, unknown>): Promise<JobRow>;
+  enqueueIn(type: "submit_batch" | "sync_invoices", payload: Record<string, unknown>, delayMs: number): Promise<JobRow>;
   claimNext(workerId: string): Promise<JobRow | null>;
   complete(id: string): Promise<void>;
   fail(id: string, error: string, retryInMs: number | null): Promise<void>;
   listDead(): Promise<JobRow[]>;
+  hasPending(type: "submit_batch" | "sync_invoices"): Promise<boolean>;
 }
 
 export interface Repositories {

@@ -267,6 +267,23 @@ export class FakeRepositories implements Repositories {
       this.jobRows.push(row);
       return row;
     },
+    enqueueIn: async (type: "submit_batch" | "sync_invoices", payload: Record<string, unknown>, delayMs: number) => {
+      const row: JobRow = {
+        id: uuidv7(),
+        type,
+        payload,
+        status: "pending",
+        attempts: 0,
+        maxAttempts: 5,
+        runAt: new Date(Date.now() + delayMs),
+        lockedAt: null,
+        lockedBy: null,
+        lastError: null,
+        createdAt: new Date(),
+      };
+      this.jobRows.push(row);
+      return row;
+    },
     claimNext: async (workerId: string) => {
       const now = Date.now();
       const candidates = this.jobRows
@@ -301,6 +318,8 @@ export class FakeRepositories implements Repositories {
       job.runAt = new Date(Date.now() + retryInMs);
     },
     listDead: async () => this.jobRows.filter((j) => j.status === "failed"),
+    hasPending: async (type: "submit_batch" | "sync_invoices") =>
+      this.jobRows.some((j) => j.type === type && (j.status === "pending" || j.status === "running")),
   };
 
   async transaction<T>(fn: (repos: Repositories) => Promise<T>): Promise<T> {

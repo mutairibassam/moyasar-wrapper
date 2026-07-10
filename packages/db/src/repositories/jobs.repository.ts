@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { jobs } from "../schema";
 import type { Executor, JobRow, JobsRepository } from "./types";
 
@@ -7,6 +7,14 @@ export class DrizzleJobsRepository implements JobsRepository {
 
   async enqueue(type: "submit_batch" | "sync_invoices", payload: Record<string, unknown>): Promise<JobRow> {
     const [row] = await this.db.insert(jobs).values({ type, payload }).returning();
+    return row!;
+  }
+
+  async enqueueIn(type: "submit_batch" | "sync_invoices", payload: Record<string, unknown>, delayMs: number): Promise<JobRow> {
+    const [row] = await this.db
+      .insert(jobs)
+      .values({ type, payload, runAt: sql`now() + (${delayMs} || ' milliseconds')::interval` })
+      .returning();
     return row!;
   }
 
@@ -49,5 +57,13 @@ export class DrizzleJobsRepository implements JobsRepository {
 
   async listDead(): Promise<JobRow[]> {
     return this.db.select().from(jobs).where(eq(jobs.status, "failed"));
+  }
+
+  async hasPending(type: "submit_batch" | "sync_invoices"): Promise<boolean> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(jobs)
+      .where(and(eq(jobs.type, type), inArray(jobs.status, ["pending", "running"])));
+    return (row?.value ?? 0) > 0;
   }
 }
