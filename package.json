@@ -3,9 +3,10 @@
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "test": "bun test",
+    "test": "bun test packages apps/api",
     "test:unit": "bun test packages/shared apps/api --path-ignore-patterns '**/*.integration.test.ts'",
     "test:db": "bun test packages/db apps/api/test/api",
+    "test:web": "bun run --filter '@moyasar-ops/web' test",
     "typecheck": "bunx tsc --noEmit -p packages/shared && bunx tsc --noEmit -p packages/db && bunx tsc --noEmit -p apps/api"
   },
   "devDependencies": {
