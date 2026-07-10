@@ -39,4 +39,11 @@ export class StateTransitionError extends AppError {
 export class MoyasarApiError extends AppError {
   readonly status = 502;
   readonly type = "moyasar_api_error";
+  constructor(
+    message: string,
+    detail?: unknown,
+    readonly ambiguous = false,
+  ) {
+    super(message, detail);
+  }
 }
