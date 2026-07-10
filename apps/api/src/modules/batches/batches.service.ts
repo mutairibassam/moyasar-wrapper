@@ -252,6 +252,8 @@ export class BatchesService {
     }
 
     return this.repos.transaction(async (r) => {
+      const settings = await r.settings.get();
+      const mode = settings.activeMode;
       const before = { status: batch.status };
       const updated = await r.batches.update(
         id,
@@ -259,7 +261,7 @@ export class BatchesService {
           status: "approved",
           approvedBy: actor.id,
           approvedAt: new Date(),
-          mode: "test", // active mode is snapshotted here; Plan 4 reads it from settings
+          mode, // active mode snapshotted from settings at approval time
         },
         "pending_approval",
       );
@@ -273,6 +275,7 @@ export class BatchesService {
         after: { status: "approved", approvedBy: actor.id },
         ip: ctx.ip,
       });
+      await r.jobs.enqueue("submit_batch", { batchId: id });
       return this.loadViewTx(r, id);
     });
   }

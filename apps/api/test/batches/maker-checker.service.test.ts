@@ -61,6 +61,8 @@ describe("approve / reject (maker-checker)", () => {
     expect(view.approvedBy).toBe(approver.id);
     expect(view.mode).not.toBeNull(); // mode snapshotted
     expect(repos.auditRows.some((a) => a.action === "batch.approved")).toBe(true);
+    const job = repos.jobRows.find((j) => j.type === "submit_batch" && (j.payload as { batchId?: string }).batchId === id);
+    expect(job).toBeDefined();
   });
 
   test("the creator cannot approve their own batch, even as admin", async () => {
