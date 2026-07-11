@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts",
-    "seed:admin": "bun run src/scripts/seed-admin.ts"
+    "start": "bun src/index.ts"
   },
   "dependencies": {
     "@moyasar-ops/db": "workspace:*",

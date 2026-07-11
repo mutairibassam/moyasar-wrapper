@@ -2,7 +2,8 @@ import { createRepositories, type Db, type Repositories } from "@moyasar-ops/db"
 import type { Config } from "./config";
 import { JobRunner, type JobHandler } from "./jobs/job-runner";
 import { AuthService } from "./modules/auth/auth.service";
-import { SlidingWindowRateLimiter } from "./modules/auth/rate-limiter";
+import { EntraOidcClient } from "./modules/auth/oidc/entra-oidc-client";
+import type { OidcClient } from "./modules/auth/oidc/oidc-client";
 import { BatchesService } from "./modules/batches/batches.service";
 import { InvoicesService } from "./modules/moyasar/invoices.service";
 import { MoyasarClient } from "./modules/moyasar/moyasar-client";
@@ -15,6 +16,7 @@ export type Container = {
   config: Config;
   repos: Repositories;
   auth: AuthService;
+  oidc: OidcClient;
   users: UsersService;
   batches: BatchesService;
   settings: SettingsService;
@@ -22,13 +24,28 @@ export type Container = {
   runner: JobRunner;
 };
 
-export function createContainer(db: Db, config: Config, moyasarFetch?: typeof fetch): Container {
+/** Build the real OIDC client from config (async: performs issuer discovery). */
+export function createOidcClient(config: Config): Promise<OidcClient> {
+  return EntraOidcClient.create({
+    issuerUrl: config.oidc.issuerUrl,
+    clientId: config.oidc.clientId,
+    clientSecret: config.oidc.clientSecret,
+    redirectUri: config.oidc.redirectUri,
+    identityClaim: config.oidc.identityClaim,
+    groupsClaim: config.oidc.groupsClaim,
+    emailClaim: config.oidc.emailClaim,
+    nameClaim: config.oidc.nameClaim,
+  });
+}
+
+export function createContainer(
+  db: Db,
+  config: Config,
+  oidc: OidcClient,
+  moyasarFetch?: typeof fetch,
+): Container {
   const repos = createRepositories(db);
-  const limiter = new SlidingWindowRateLimiter(
-    config.loginRateMax,
-    config.loginRateWindowMinutes * 60_000,
-  );
-  const auth = new AuthService(repos, limiter, config.sessionTtlMinutes * 60_000);
+  const auth = new AuthService(repos, config.sessionTtlMinutes * 60_000);
   const users = new UsersService(repos);
   const batches = new BatchesService(repos);
   const settings = new SettingsService(repos, config.keyEncryptionKey);
@@ -62,5 +79,5 @@ export function createContainer(db: Db, config: Config, moyasarFetch?: typeof fe
     { workerId: "api-1", pollIntervalMs: config.jobPollIntervalMs },
   );
 
-  return { config, repos, auth, users, batches, settings, invoices, runner };
+  return { config, repos, auth, oidc, users, batches, settings, invoices, runner };
 }

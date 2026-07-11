@@ -46,14 +46,17 @@ export class FakeRepositories implements Repositories {
   users: UsersRepository = {
     findById: async (id) => this.userRows.find((u) => u.id === id) ?? null,
     findByEmail: async (email) => this.userRows.find((u) => u.email === email) ?? null,
+    findByEntraOid: async (entraOid) => this.userRows.find((u) => u.entraOid === entraOid) ?? null,
     list: async () => [...this.userRows],
     create: async (input: NewUserRow) => {
       const row: UserRow = {
         id: input.id ?? uuidv7(),
         email: input.email,
-        passwordHash: input.passwordHash,
+        entraOid: input.entraOid ?? null,
+        passwordHash: input.passwordHash ?? null,
         displayName: input.displayName,
         role: input.role,
+        groupsSnapshot: input.groupsSnapshot ?? [],
         isActive: input.isActive ?? true,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -66,6 +69,30 @@ export class FakeRepositories implements Repositories {
       if (!u) return null;
       Object.assign(u, patch, { updatedAt: new Date() });
       return u;
+    },
+    upsertByEntraOid: async (input) => {
+      const existing = this.userRows.find((u) => u.entraOid === input.entraOid);
+      if (existing) {
+        existing.email = input.email;
+        existing.displayName = input.displayName;
+        existing.groupsSnapshot = input.groupsSnapshot;
+        existing.updatedAt = new Date();
+        return existing;
+      }
+      const row: UserRow = {
+        id: uuidv7(),
+        email: input.email,
+        entraOid: input.entraOid,
+        passwordHash: null,
+        displayName: input.displayName,
+        role: input.defaultRole,
+        groupsSnapshot: input.groupsSnapshot,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.userRows.push(row);
+      return row;
     },
   };
 

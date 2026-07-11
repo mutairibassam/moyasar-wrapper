@@ -17,7 +17,6 @@ describe("loadConfig", () => {
     expect(c.port).toBe(3001);
     expect(c.sessionTtlMinutes).toBe(720);
     expect(c.cookieSecure).toBe(true);
-    expect(c.loginRateMax).toBe(5);
   });
 
   test("coerces overrides", () => {
