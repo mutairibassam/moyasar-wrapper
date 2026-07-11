@@ -10,6 +10,10 @@ const app = createApp(container);
 
 container.runner.start();
 
+if (!(await container.repos.jobs.hasPending("sync_invoices"))) {
+  await container.repos.jobs.enqueueIn("sync_invoices", {}, 0);
+}
+
 async function shutdown(): Promise<void> {
   await container.runner.stop();
   process.exit(0);

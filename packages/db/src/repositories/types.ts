@@ -74,6 +74,15 @@ export interface BatchesRepository {
   ): Promise<BatchRow | null>;
 }
 
+export type InvoiceQuery = {
+  page: number;
+  perPage: number;
+  moyasarStatus?: NonNullable<ItemRow["moyasarStatus"]>;
+  batchId?: string;
+  createdAfter?: Date;
+  createdBefore?: Date;
+};
+
 export interface ItemsRepository {
   listByBatch(batchId: string): Promise<ItemRow[]>;
   deleteByBatch(batchId: string): Promise<void>;
@@ -83,6 +92,10 @@ export interface ItemsRepository {
   recordSubmitted(itemId: string, moyasar: { id: string; url: string | null; status: string }): Promise<void>;
   recordFailed(itemId: string, error: string): Promise<void>;
   listByBatchAndStatus(batchId: string, status: ItemRow["status"]): Promise<ItemRow[]>;
+  listOpenSubmitted(): Promise<ItemRow[]>;
+  syncStatus(itemId: string, moyasarStatus: NonNullable<ItemRow["moyasarStatus"]>): Promise<void>;
+  findByMoyasarInvoiceId(moyasarInvoiceId: string): Promise<ItemRow | null>;
+  queryInvoices(opts: InvoiceQuery): Promise<{ items: ItemRow[]; total: number }>;
 }
 
 export interface SettingsRepository {
@@ -92,10 +105,12 @@ export interface SettingsRepository {
 
 export interface JobsRepository {
   enqueue(type: "submit_batch" | "sync_invoices", payload: Record<string, unknown>): Promise<JobRow>;
+  enqueueIn(type: "submit_batch" | "sync_invoices", payload: Record<string, unknown>, delayMs: number): Promise<JobRow>;
   claimNext(workerId: string): Promise<JobRow | null>;
   complete(id: string): Promise<void>;
   fail(id: string, error: string, retryInMs: number | null): Promise<void>;
   listDead(): Promise<JobRow[]>;
+  hasPending(type: "submit_batch" | "sync_invoices"): Promise<boolean>;
 }
 
 export interface Repositories {

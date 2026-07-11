@@ -89,5 +89,10 @@ export function batchesRoutes() {
     return c.json({ batch: view }, 201);
   });
 
+  app.post("/:id/refresh", requireRole("maker", "approver", "admin"), async (c) => {
+    const result = await c.get("container").invoices.refreshBatch(c.get("user")!, c.req.param("id"));
+    return c.json(result);
+  });
+
   return app;
 }

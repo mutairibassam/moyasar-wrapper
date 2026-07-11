@@ -7,6 +7,7 @@ import { sessionMiddleware } from "./middleware/session";
 import { auditRoutes } from "./modules/audit/audit.routes";
 import { authRoutes } from "./modules/auth/auth.routes";
 import { batchesRoutes } from "./modules/batches/batches.routes";
+import { invoicesRoutes } from "./modules/moyasar/invoices.routes";
 import { settingsRoutes } from "./modules/settings/settings.routes";
 import { usersRoutes } from "./modules/users/users.routes";
 
@@ -43,6 +44,7 @@ export function createApp(container: Container): Hono<AppEnv> {
   app.route("/api/v1/audit", auditRoutes());
   app.route("/api/v1/batches", batchesRoutes());
   app.route("/api/v1/settings", settingsRoutes());
+  app.route("/api/v1/invoices", invoicesRoutes());
 
   app.get("/api/v1/me", async (c) => {
     const user = c.get("user");

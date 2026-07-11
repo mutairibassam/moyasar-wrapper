@@ -1,5 +1,5 @@
 import { MoyasarApiError } from "../../errors";
-import { bulkResponseSchema, type BulkInvoiceInput, listResponseSchema, type MoyasarInvoice } from "./moyasar-types";
+import { bulkResponseSchema, type BulkInvoiceInput, listResponseSchema, moyasarInvoiceSchema, type MoyasarInvoice } from "./moyasar-types";
 
 type Options = {
   baseUrl: string;
@@ -87,6 +87,42 @@ export class MoyasarClient {
       }
       const body = await res.json().catch(() => ({}));
       throw new MoyasarApiError(`Moyasar list ${res.status}`, body, res.status >= 500);
+    }
+  }
+
+  async fetchInvoice(id: string): Promise<MoyasarInvoice> {
+    const res = await this.getWithRetry(`/invoices/${encodeURIComponent(id)}`, "GET");
+    const parsed = moyasarInvoiceSchema.safeParse(await res.json().catch(() => null));
+    if (!parsed.success) throw new MoyasarApiError("Unexpected Moyasar invoice shape", parsed.error?.flatten(), true);
+    return parsed.data;
+  }
+
+  async cancel(id: string): Promise<MoyasarInvoice> {
+    const res = await this.getWithRetry(`/invoices/${encodeURIComponent(id)}/cancel`, "PUT");
+    const parsed = moyasarInvoiceSchema.safeParse(await res.json().catch(() => null));
+    if (!parsed.success) throw new MoyasarApiError("Unexpected Moyasar cancel shape", parsed.error?.flatten(), true);
+    return parsed.data;
+  }
+
+  /** Retrying request for idempotent calls (GET, and cancel which is idempotent). Throws MoyasarApiError on a non-2xx that isn't retryable or when retries are exhausted. */
+  private async getWithRetry(path: string, method: "GET" | "PUT"): Promise<Response> {
+    let attempt = 0;
+    for (;;) {
+      let res: Response;
+      try {
+        res = await this.raw(path, { method });
+      } catch (e) {
+        if (attempt++ >= this.maxRetries) throw new MoyasarApiError(`Moyasar ${method} ${path} failed: ${String(e)}`, undefined, true);
+        await this.backoff(attempt);
+        continue;
+      }
+      if (res.ok) return res;
+      if ((res.status === 429 || res.status >= 500) && attempt++ < this.maxRetries) {
+        await this.backoff(attempt);
+        continue;
+      }
+      const body = await res.json().catch(() => ({}));
+      throw new MoyasarApiError(`Moyasar ${method} ${path} ${res.status}`, body, res.status >= 500);
     }
   }
 

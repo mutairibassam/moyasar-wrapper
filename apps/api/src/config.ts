@@ -17,6 +17,7 @@ const configSchema = z.object({
   keyEncryptionKey: z.string().min(1, "KEY_ENCRYPTION_KEY is required"),
   moyasarBaseUrl: z.string().min(1).default("https://api.moyasar.com/v1"),
   jobPollIntervalMs: z.coerce.number().int().default(2000),
+  syncIntervalMs: z.coerce.number().int().default(300000),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -32,6 +33,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     keyEncryptionKey: env.KEY_ENCRYPTION_KEY,
     moyasarBaseUrl: env.MOYASAR_BASE_URL,
     jobPollIntervalMs: env.JOB_POLL_INTERVAL_MS,
+    syncIntervalMs: env.SYNC_INTERVAL_MS,
   });
   if (!parsed.success) {
     throw new Error(`Invalid configuration: ${parsed.error.message}`);
