@@ -79,7 +79,7 @@ export type AuditEntry = {
   actorId: string | null;
   action: string;
   entityType: string;
-  entityId: string | null;
+  entityId: string;
   before: unknown;
   after: unknown;
   ip: string | null;
