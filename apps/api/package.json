@@ -9,9 +9,10 @@
     "seed:admin": "bun run src/scripts/seed-admin.ts"
   },
   "dependencies": {
-    "@moyasar-ops/shared": "workspace:*",
     "@moyasar-ops/db": "workspace:*",
+    "@moyasar-ops/shared": "workspace:*",
     "hono": "^4.12.28",
+    "openid-client": "^6",
     "zod": "^4.4.3"
   },
   "devDependencies": {
