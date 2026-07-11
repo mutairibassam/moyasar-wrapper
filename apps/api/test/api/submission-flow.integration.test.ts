@@ -1,50 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createDb, createRepositories, invoiceBatches, invoiceItems, jobs, sessions } from "@moyasar-ops/db";
 import { eq, inArray } from "drizzle-orm";
-import { createApp } from "../../src/app";
-import { loadConfig } from "../../src/config";
-import { createContainer } from "../../src/container";
-import { hashPassword } from "../../src/modules/auth/password";
+import { loginAs, makeApp, testConfig } from "../support/auth";
 
 const url = process.env.DATABASE_URL ?? "postgres://moyasar_ops:dev_password@localhost:5433/moyasar_ops";
 const db = createDb(url);
-const baseConfig = {
-  ...loadConfig({
-    DATABASE_URL: url,
-    KEY_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
-  } as NodeJS.ProcessEnv),
-  cookieSecure: false,
-};
 
 const stamp = Date.now();
 const ids: string[] = [];
-
-async function seed(email: string, role: "maker" | "approver" | "admin") {
-  const repos = createRepositories(db);
-  const u = await repos.users.create({
-    email,
-    passwordHash: await hashPassword("a-strong-password"),
-    displayName: role,
-    role,
-  });
-  ids.push(u.id);
-  return u.id;
-}
-
-function jar(setCookies: string[]) {
-  const parts = setCookies.map((c) => c.split(";")[0]!);
-  const csrf = parts.find((c) => c.startsWith("csrf_token="))!.split("=")[1]!;
-  return { cookie: parts.join("; "), csrf };
-}
-
-async function login(app: ReturnType<typeof createApp>, email: string) {
-  const res = await app.request("/api/v1/auth/login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: "a-strong-password" }),
-  });
-  return jar(res.headers.getSetCookie());
-}
 
 /** Mock Moyasar `fetch`: bulk-create succeeds (201) or is rejected (400), list is always empty. */
 function makeMockFetch(bulkStatus: 201 | 400): typeof fetch {
@@ -90,24 +53,25 @@ async function seedTestKey(): Promise<void> {
   const repos = createRepositories(db);
   const admin = await repos.users.create({
     email: `sub-key-admin-${stamp}@example.com`,
-    passwordHash: await hashPassword("a-strong-password"),
     displayName: "key admin",
     role: "admin",
   });
   ids.push(admin.id);
   const settingsModule = await import("../../src/modules/settings/settings.service");
-  const settings = new settingsModule.SettingsService(repos, baseConfig.keyEncryptionKey);
+  const settings = new settingsModule.SettingsService(repos, testConfig().keyEncryptionKey);
   const adminPublic = { id: admin.id, email: admin.email, displayName: admin.displayName, role: admin.role, isActive: true };
   await settings.setKey(adminPublic, "test", `sk_test_${stamp}_mockkey`, { ip: null });
 }
 
 async function makerApproverFlow(
-  app: ReturnType<typeof createApp>,
+  app: ReturnType<typeof makeApp>["app"],
   makerEmail: string,
   approverEmail: string,
-): Promise<string> {
-  const maker = await login(app, makerEmail);
-  const approver = await login(app, approverEmail);
+): Promise<{ batchId: string; makerCookie: string }> {
+  const maker = await loginAs(app, { email: makerEmail, role: "maker" });
+  ids.push(maker.userId);
+  const approver = await loginAs(app, { email: approverEmail, role: "approver" });
+  ids.push(approver.userId);
 
   const created = await app.request("/api/v1/batches", {
     method: "POST",
@@ -142,7 +106,7 @@ async function makerApproverFlow(
   expect(approved.status).toBe(200);
   expect((await approved.json()).batch.status).toBe("approved");
 
-  return batchId;
+  return { batchId, makerCookie: maker.cookie };
 }
 
 describe("submission flow (approve -> enqueue -> runner -> engine, mock Moyasar)", () => {
@@ -153,19 +117,16 @@ describe("submission flow (approve -> enqueue -> runner -> engine, mock Moyasar)
   test("happy path: bulk create succeeds -> items submitted, batch submitted", async () => {
     const makerEmail = `sub-maker-ok-${stamp}@example.com`;
     const approverEmail = `sub-approver-ok-${stamp}@example.com`;
-    await seed(makerEmail, "maker");
-    await seed(approverEmail, "approver");
 
-    const container = createContainer(db, baseConfig, makeMockFetch(201));
-    const app = createApp(container);
+    const { app, container } = makeApp(db, { moyasarFetch: makeMockFetch(201) });
 
-    const batchId = await makerApproverFlow(app, makerEmail, approverEmail);
+    const { batchId, makerCookie } = await makerApproverFlow(app, makerEmail, approverEmail);
 
     const ran = await container.runner.runOnce();
     expect(ran).toBe(true);
 
     const view = await app.request(`/api/v1/batches/${batchId}`, {
-      headers: { cookie: (await login(app, makerEmail)).cookie },
+      headers: { cookie: makerCookie },
     });
     const body = await view.json();
     expect(body.batch.status).toBe("submitted");
@@ -179,19 +140,16 @@ describe("submission flow (approve -> enqueue -> runner -> engine, mock Moyasar)
   test("bulk create rejected (400): items failed, batch partially_failed", async () => {
     const makerEmail = `sub-maker-fail-${stamp}@example.com`;
     const approverEmail = `sub-approver-fail-${stamp}@example.com`;
-    await seed(makerEmail, "maker");
-    await seed(approverEmail, "approver");
 
-    const container = createContainer(db, baseConfig, makeMockFetch(400));
-    const app = createApp(container);
+    const { app, container } = makeApp(db, { moyasarFetch: makeMockFetch(400) });
 
-    const batchId = await makerApproverFlow(app, makerEmail, approverEmail);
+    const { batchId, makerCookie } = await makerApproverFlow(app, makerEmail, approverEmail);
 
     const ran = await container.runner.runOnce();
     expect(ran).toBe(true);
 
     const view = await app.request(`/api/v1/batches/${batchId}`, {
-      headers: { cookie: (await login(app, makerEmail)).cookie },
+      headers: { cookie: makerCookie },
     });
     const body = await view.json();
     expect(body.batch.status).toBe("partially_failed");

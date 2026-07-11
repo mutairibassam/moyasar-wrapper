@@ -1,21 +1,9 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { appSettings, createDb, createRepositories, sessions } from "@moyasar-ops/db";
+import { appSettings, sessions } from "@moyasar-ops/db";
 import { eq } from "drizzle-orm";
-import { createApp } from "../../src/app";
-import { loadConfig } from "../../src/config";
-import { createContainer } from "../../src/container";
-import { hashPassword } from "../../src/modules/auth/password";
+import { loginAs, makeTestApp } from "../support/auth";
 
-const url = process.env.DATABASE_URL ?? "postgres://moyasar_ops:dev_password@localhost:5433/moyasar_ops";
-const db = createDb(url);
-const config = {
-  ...loadConfig({
-    DATABASE_URL: url,
-    KEY_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
-  } as NodeJS.ProcessEnv),
-  cookieSecure: false,
-};
-const app = createApp(createContainer(db, config));
+const { app, db } = makeTestApp();
 
 const stamp = Date.now();
 const adminEmail = `sf-admin-${stamp}@example.com`;
@@ -23,41 +11,14 @@ const viewerEmail = `sf-viewer-${stamp}@example.com`;
 const ids: string[] = [];
 const plaintextKey = `sk_test_${stamp}_supersecretmoyasarkey`;
 
-async function seed(email: string, role: "admin" | "viewer") {
-  const repos = createRepositories(db);
-  const u = await repos.users.create({
-    email,
-    passwordHash: await hashPassword("a-strong-password"),
-    displayName: role,
-    role,
-  });
-  ids.push(u.id);
-  return u.id;
-}
-
-function jar(setCookies: string[]) {
-  const parts = setCookies.map((c) => c.split(";")[0]!);
-  const csrf = parts.find((c) => c.startsWith("csrf_token="))!.split("=")[1]!;
-  return { cookie: parts.join("; "), csrf };
-}
-
-async function login(email: string) {
-  const res = await app.request("/api/v1/auth/login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: "a-strong-password" }),
-  });
-  return jar(res.headers.getSetCookie());
-}
+let admin: { cookie: string; csrf: string; userId: string };
 
 beforeAll(async () => {
-  await seed(adminEmail, "admin");
-  await seed(viewerEmail, "viewer");
+  admin = await loginAs(app, { email: adminEmail, role: "admin" });
+  ids.push(admin.userId);
 });
 
 test("admin views masked settings, sets a key, switches mode; viewer is forbidden; plaintext key never leaks", async () => {
-  const admin = await login(adminEmail);
-
   // 1. GET masked view
   const initial = await app.request("/api/v1/settings", {
     method: "GET",
@@ -112,7 +73,8 @@ test("admin views masked settings, sets a key, switches mode; viewer is forbidde
   expect(setModeBody.settings.activeMode).toBe("live");
 
   // 4. Viewer is forbidden
-  const viewer = await login(viewerEmail);
+  const viewer = await loginAs(app, { email: viewerEmail, role: "viewer" });
+  ids.push(viewer.userId);
   const forbidden = await app.request("/api/v1/settings", {
     method: "GET",
     headers: { cookie: viewer.cookie },
