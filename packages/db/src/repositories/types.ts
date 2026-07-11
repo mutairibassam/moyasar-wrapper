@@ -1,4 +1,4 @@
-import type { appSettings, auditLogs, invoiceBatches, invoiceItems, jobs, sessions, users } from "../schema";
+import type { appSettings, auditLogs, invoiceBatches, invoiceItems, jobs, sessions, userRoleEnum, users } from "../schema";
 import type { Db } from "../client";
 
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -6,6 +6,15 @@ export type Executor = Db | Tx;
 
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
+export type UserRole = (typeof userRoleEnum.enumValues)[number];
+
+export type UpsertByEntraOidInput = {
+  entraOid: string;
+  email: string;
+  displayName: string;
+  groupsSnapshot: string[];
+  defaultRole: UserRole;
+};
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSessionRow = typeof sessions.$inferInsert;
 export type AuditRow = typeof auditLogs.$inferSelect;
@@ -45,9 +54,11 @@ export type AuditListOptions = {
 export interface UsersRepository {
   findById(id: string): Promise<UserRow | null>;
   findByEmail(email: string): Promise<UserRow | null>;
+  findByEntraOid(entraOid: string): Promise<UserRow | null>;
   list(): Promise<UserRow[]>;
   create(input: NewUserRow): Promise<UserRow>;
   update(id: string, patch: Partial<NewUserRow>): Promise<UserRow | null>;
+  upsertByEntraOid(input: UpsertByEntraOidInput): Promise<UserRow>;
 }
 
 export interface SessionsRepository {

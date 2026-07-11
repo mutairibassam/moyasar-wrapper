@@ -11,7 +11,7 @@ test("inserts and reads a user and a batch with defaults", async () => {
   const email = `it-${Date.now()}@example.com`;
   const [user] = await db
     .insert(users)
-    .values({ email, passwordHash: "x", displayName: "IT User", role: "maker" })
+    .values({ email, displayName: "IT User", role: "maker" })
     .returning();
   expect(user!.id).toMatch(/^[0-9a-f-]{36}$/);
   expect(user!.isActive).toBe(true);
