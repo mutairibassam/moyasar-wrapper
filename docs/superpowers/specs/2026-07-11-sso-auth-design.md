@@ -31,10 +31,21 @@ gate, just-in-time user provisioning, and a green test suite. It deliberately do
    httpOnly `session` + `csrf_token` cookies used today. The Next.js frontend and
    its route guard are essentially unchanged. (Rejected: Auth.js in Next, MSAL SPA
    tokens — both discard the existing cookie/CSRF model.)
-2. **Env-gated dev login** for local dev and CI (real Entra SSO can't run there).
-3. **App-access group gate.** Only members of a designated Entra group may obtain a
+2. **Config-driven OIDC.** The OIDC client reads its issuer/discovery URL, client
+   credentials, and claim-name mappings from environment — nothing about Entra is
+   hardcoded. Consequence: the only difference between local dev and production is
+   **environment variables, not code**. (Rejected as auth transports: LDAP —
+   reintroduces app-held passwords, needs Entra Domain Services / on-prem AD, and
+   loses SSO/MFA/Conditional Access; SCIM — is provisioning/sync, not
+   authentication. See "Future options".)
+3. **Two-layer dev/test auth.** `dev-login` (env-gated, session-minting shim) for
+   hermetic CI and quick local iteration; a **Keycloak container** (dev-only) as a
+   mock OIDC provider so the real redirect → callback → token-validation path can be
+   exercised locally without a real tenant. Keycloak is never in the production
+   path — prod points the same code at Entra via config.
+4. **App-access group gate.** Only members of a designated Entra group may obtain a
    session; tenant membership alone is not enough.
-4. **Token claims + Graph.** Group membership is read from the ID token's `groups`
+5. **Token claims + Graph.** Group membership is read from the ID token's `groups`
    claim; the line manager (sub-project C) will come from Microsoft Graph. The app
    registration is set up with Graph permissions now so C is not blocked.
 
@@ -66,6 +77,23 @@ unchanged.
 **Library:** use a vetted OIDC client (`openid-client`) for state/nonce/PKCE
 handling and token validation rather than hand-rolling — authentication is not a
 place to DIY cryptographic validation.
+
+**Config-driven, not Entra-hardcoded.** The client is configured entirely from env:
+the issuer is resolved from a discovery URL (`OIDC_ISSUER_URL`), and the claims it
+depends on are mapped by name (`OIDC_IDENTITY_CLAIM`, `OIDC_GROUPS_CLAIM`,
+`OIDC_EMAIL_CLAIM`, `OIDC_NAME_CLAIM`). This is what makes Keycloak-dev and
+Entra-prod differ only in configuration:
+
+| Config | Dev (Keycloak) | Prod (Entra) |
+|---|---|---|
+| `OIDC_ISSUER_URL` | `http://keycloak:8080/realms/dev` | `https://login.microsoftonline.com/{tenant}/v2.0` |
+| identity claim | `sub` | `oid` |
+| groups claim | `groups` | `groups` |
+| client id / secret | Keycloak client | Entra app registration |
+
+The immutable identity value read via `OIDC_IDENTITY_CLAIM` is stored as
+`entraOid` (name kept for continuity; it holds whatever stable subject the IdP
+issues).
 
 **Removed from Plan 2:** password hashing, the password `POST /auth/login`, the
 login rate-limiter, and the `seed:admin` script. These are replaced by SSO. First
@@ -112,17 +140,20 @@ by `entraOid`. No signups, no manual admin provisioning step.
 
 | Var | Purpose |
 |---|---|
-| `ENTRA_TENANT_ID` | Tenant (single-tenant, internal) |
-| `ENTRA_CLIENT_ID` | App registration client ID |
-| `ENTRA_CLIENT_SECRET` | App registration secret |
-| `ENTRA_REDIRECT_URI` | `…/api/v1/auth/callback` |
-| `APP_ACCESS_GROUP_ID` | Entra group whose members may sign in |
+| `OIDC_ISSUER_URL` | IdP issuer; endpoints resolved from its `…/.well-known/openid-configuration` |
+| `OIDC_CLIENT_ID` | Client ID (Entra app registration / Keycloak client) |
+| `OIDC_CLIENT_SECRET` | Client secret |
+| `OIDC_REDIRECT_URI` | `…/api/v1/auth/callback` |
+| `OIDC_IDENTITY_CLAIM` | Immutable subject claim (`oid` for Entra, `sub` for Keycloak) |
+| `OIDC_GROUPS_CLAIM` | Groups claim name (default `groups`) |
+| `OIDC_EMAIL_CLAIM` / `OIDC_NAME_CLAIM` | Email + display-name claim names |
+| `APP_ACCESS_GROUP_ID` | Group whose members may sign in |
 | `DEV_LOGIN` | `true` enables `/auth/dev-login` (never in prod) |
 
-Entra endpoints are resolved from the tenant OIDC discovery document
-(`…/v2.0/.well-known/openid-configuration`). The app registration is configured to
-emit **only app-assigned groups** in the token (avoids the groups "overage" limit)
-and is granted Microsoft Graph permission so sub-project C can look up the manager.
+Endpoints are resolved from the issuer's OIDC discovery document. For Entra, the
+app registration is configured to emit **only app-assigned groups** in the token
+(avoids the groups "overage" limit) and is granted Microsoft Graph permission so
+sub-project C can look up the manager.
 
 Local dev also keeps `COOKIE_SECURE=false` for http://localhost (a `Secure` cookie
 is never sent over plain http).
@@ -131,10 +162,21 @@ is never sent over plain http).
 
 ## Dev / test story & test migration
 
-`dev-login` provides hermetic local dev and CI. The significant cost: **every
-existing backend test currently authenticates via the Plan 2 password flow.** They
-migrate to a `dev-login`/session test helper. This is mechanical but spans many
-test files across Plans 2–6 and is the largest single chunk of work in A.
+Two layers, different jobs:
+
+- **`dev-login`** (env-gated session-minting shim) — for automated tests, CI, and
+  quick local iteration. Hermetic and fast; does **not** exercise the OIDC path.
+- **Keycloak container** (dev-only, in the local docker-compose) — a mock OIDC
+  provider so the real redirect → callback → token-validation flow can be tested
+  locally without a real tenant. Preloaded from a checked-in **realm-export**
+  (a `dev` realm with a client, test users, and groups incl. the app-access group).
+  Because the OIDC client is config-driven, switching to Entra in production is an
+  env-var change only; Keycloak never ships to production.
+
+The significant cost is the **test migration**: every existing backend test
+currently authenticates via the Plan 2 password flow. They migrate to a
+`dev-login`/session test helper. This is mechanical but spans many test files
+across Plans 2–6 and is the largest single chunk of work in A.
 
 `dev-login` is gated by `DEV_LOGIN=true` and must be provably inert in production
 (guarded at route registration and re-checked in the handler; covered by a test
@@ -152,6 +194,9 @@ asserting `404`/`403` when the flag is off).
   hard-disabled when `DEV_LOGIN` is not `true`.
 - **Session continuity:** existing session middleware, CSRF, and `/me` behavior
   unchanged after a session is issued via callback or dev-login.
+- **Config-driven claim mapping:** the identity/groups/email/name claims are read
+  by configured name, verified against both a Keycloak-shaped token (`sub`) and an
+  Entra-shaped token (`oid`) so the same code path serves dev and prod.
 - Full backend suite green after the test-auth migration.
 
 ---
@@ -161,6 +206,16 @@ asserting `404`/`403` when the flag is off).
 - Group → role mapping and the 3-role model (admin / approver / user) → **B**.
 - Line-manager lookup and the two-stage approval workflow → **C**.
 - Login-screen visual redesign and broader UI polish → **D**.
+
+## Future options (not decided here)
+
+- **SCIM provisioning.** Revisit in sub-projects B/C: Entra can provision users,
+  group memberships, and the manager attribute *into* the app's DB via SCIM, which
+  would let B/C read roles and the line manager locally instead of calling
+  Microsoft Graph at runtime. It is a provisioning/sync mechanism, **not** an
+  authentication path (OIDC still logs users in). Adds a SCIM endpoint + an Entra
+  Enterprise App provisioning config — worth it only if runtime Graph calls become
+  a pain. Recorded here so B/C can weigh it against direct Graph lookups.
 
 ---
 
