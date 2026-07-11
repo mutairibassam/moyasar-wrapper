@@ -43,8 +43,13 @@ export function authRoutes() {
     const container = c.get("container");
     const txRaw = getCookie(c, OIDC_TX_COOKIE);
     if (!txRaw) throw new AuthnError("Missing OIDC transaction");
-    const tx = JSON.parse(txRaw) as { state: string; nonce: string; codeVerifier: string };
     deleteCookie(c, OIDC_TX_COOKIE, { path: "/" });
+    let tx: { state: string; nonce: string; codeVerifier: string };
+    try {
+      tx = JSON.parse(txRaw);
+    } catch {
+      throw new AuthnError("Malformed OIDC transaction");
+    }
 
     const claims = await container.oidc.handleCallback({
       currentUrl: c.req.url,

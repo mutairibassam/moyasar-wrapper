@@ -68,3 +68,24 @@ The dev realm ships two users (password `password`): **alice** (in
 2. Sign in as **alice** → lands on the dashboard (session issued).
 3. Sign in as **bob** → rejected at the app-access gate.
 4. Log out → session cleared.
+
+## Production deployment caveats (sub-project A)
+
+These are required or must be understood before shipping A standalone; several are
+resolved by sub-project **B**:
+
+- **Groups "overage" must be avoided.** Configure the Entra app registration to emit
+  **only app-assigned groups** in the `groups` claim. If a user belongs to too many
+  groups, Entra omits the claim entirely, and the app-access gate would then reject a
+  legitimate member with `401`.
+- **First admin.** Every SSO/JIT user defaults to `role = viewer` (group→role mapping
+  is sub-project B). A fresh deployment therefore has **no admin** until B lands or an
+  admin role is set directly in the database. Plan for this.
+- **Do not pre-create SSO users by email.** JIT provisioning upserts on `entra_oid`;
+  a pre-existing row with the same `email` but a different/NULL `entra_oid` (e.g. from
+  the legacy `POST /users` create path) collides with `UNIQUE(email)` and fails that
+  user's callback. Email-based reconciliation is deferred to sub-project B.
+- **Deactivated users:** the gate checks group membership only, so a session is minted
+  at callback even for an inactive user — but every subsequent request is rejected by
+  `resolveSession` (which enforces `isActive`), so no access is granted. An `isActive`
+  check at the gate is deferred to B.
