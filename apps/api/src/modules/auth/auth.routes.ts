@@ -51,8 +51,14 @@ export function authRoutes() {
       throw new AuthnError("Malformed OIDC transaction");
     }
 
+    // The browser reaches the callback via the same-origin web proxy, so c.req.url
+    // is the API's internal origin — not the redirect_uri the IdP saw. The token
+    // exchange derives redirect_uri from this URL, so rebuild it from the configured
+    // redirect_uri (what the browser used) with the incoming code/state query.
+    const callbackUrl = new URL(container.config.oidc.redirectUri);
+    callbackUrl.search = new URL(c.req.url).search;
     const claims = await container.oidc.handleCallback({
-      currentUrl: c.req.url,
+      currentUrl: callbackUrl.href,
       expectedState: tx.state,
       expectedNonce: tx.nonce,
       codeVerifier: tx.codeVerifier,

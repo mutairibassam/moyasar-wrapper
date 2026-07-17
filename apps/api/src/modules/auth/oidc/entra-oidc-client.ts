@@ -15,7 +15,17 @@ export class EntraOidcClient implements OidcClient {
   ) {}
 
   static async create(cfg: OidcConfig): Promise<EntraOidcClient> {
-    const config = await oidc.discovery(new URL(cfg.issuerUrl), cfg.clientId, cfg.clientSecret);
+    // openid-client enforces HTTPS by default. Allow HTTP only for a local
+    // http:// issuer (e.g. the dev Keycloak container); prod (Entra) stays HTTPS.
+    const insecure = new URL(cfg.issuerUrl).protocol === "http:";
+    const config = await oidc.discovery(
+      new URL(cfg.issuerUrl),
+      cfg.clientId,
+      cfg.clientSecret,
+      undefined,
+      insecure ? { execute: [oidc.allowInsecureRequests] } : undefined,
+    );
+    if (insecure) oidc.allowInsecureRequests(config);
     return new EntraOidcClient(cfg, config);
   }
 

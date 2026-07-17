@@ -30,7 +30,7 @@ same code runs against Keycloak in dev and Entra in prod:
 | `OIDC_ISSUER_URL` | `http://localhost:8081/realms/dev` | `https://login.microsoftonline.com/<tenant>/v2.0` |
 | `OIDC_CLIENT_ID` | `app` | app-registration client id |
 | `OIDC_CLIENT_SECRET` | `dev-secret` | app-registration secret |
-| `OIDC_REDIRECT_URI` | `http://localhost:8080/api/v1/auth/callback` | `https://<host>/api/v1/auth/callback` |
+| `OIDC_REDIRECT_URI` | `http://localhost:3000/api/v1/auth/callback` (web origin) | `https://<host>/api/v1/auth/callback` |
 | `OIDC_IDENTITY_CLAIM` | `sub` | `oid` |
 | `OIDC_GROUPS_CLAIM` | `groups` | `groups` |
 | `APP_ACCESS_GROUP_ID` | `invoice-app-users` (group name) | the group's object-id GUID |
