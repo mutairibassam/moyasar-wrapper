@@ -33,9 +33,9 @@ export function createApp(container: Container): Hono<AppEnv> {
 
   app.get("/healthz", (c) => c.json({ status: "ok" }));
 
-  // CSRF applies to every mutating route except POST /auth/login.
+  // CSRF applies to every mutating route except the dev-only login shim.
   app.use("/api/v1/*", async (c, next) => {
-    if (c.req.method === "POST" && c.req.path === "/api/v1/auth/login") return next();
+    if (c.req.method === "POST" && c.req.path === "/api/v1/auth/dev-login") return next();
     return csrfMiddleware()(c, next);
   });
 

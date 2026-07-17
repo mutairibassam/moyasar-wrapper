@@ -63,7 +63,7 @@ describe("UsersService.create", () => {
     expect(user.role).toBe("maker");
     const stored = repos.userRows.find((u) => u.id === user.id)!;
     expect(stored.passwordHash).not.toBe("a-strong-password");
-    expect(await verifyPassword("a-strong-password", stored.passwordHash)).toBe(true);
+    expect(await verifyPassword("a-strong-password", stored.passwordHash!)).toBe(true);
     expect(repos.auditRows.some((a) => a.action === "user.created")).toBe(true);
     expect((user as unknown as { passwordHash?: string }).passwordHash).toBeUndefined();
   });
@@ -93,9 +93,11 @@ describe("UsersService.update", () => {
     repos.userRows.push({
       id: admin.id,
       email: admin.email,
+      entraOid: null,
       passwordHash: "x",
       displayName: admin.displayName,
       role: "admin",
+      groupsSnapshot: [],
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -121,7 +123,7 @@ describe("UsersService.update", () => {
     );
     await service.update(admin, target.id, { password: "a-new-strong-password" }, ctx);
     const stored = repos.userRows.find((u) => u.id === target.id)!;
-    expect(await verifyPassword("a-new-strong-password", stored.passwordHash)).toBe(true);
+    expect(await verifyPassword("a-new-strong-password", stored.passwordHash!)).toBe(true);
   });
 
   test("prevents an admin from demoting or deactivating themselves", async () => {

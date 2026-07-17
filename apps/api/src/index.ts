@@ -1,11 +1,12 @@
 import { createDb } from "@moyasar-ops/db";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
-import { createContainer } from "./container";
+import { createContainer, createOidcClient } from "./container";
 
 const config = loadConfig();
 const db = createDb(config.databaseUrl);
-const container = createContainer(db, config);
+const oidc = await createOidcClient(config);
+const container = createContainer(db, config, oidc);
 const app = createApp(container);
 
 container.runner.start();

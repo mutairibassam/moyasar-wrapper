@@ -1,50 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createDb, createRepositories, invoiceBatches, invoiceItems, jobs, sessions } from "@moyasar-ops/db";
 import { eq, inArray } from "drizzle-orm";
-import { createApp } from "../../src/app";
-import { loadConfig } from "../../src/config";
-import { createContainer } from "../../src/container";
-import { hashPassword } from "../../src/modules/auth/password";
+import { loginAs, makeApp, testConfig } from "../support/auth";
 
 const url = process.env.DATABASE_URL ?? "postgres://moyasar_ops:dev_password@localhost:5433/moyasar_ops";
 const db = createDb(url);
-const baseConfig = {
-  ...loadConfig({
-    DATABASE_URL: url,
-    KEY_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
-  } as NodeJS.ProcessEnv),
-  cookieSecure: false,
-};
 
 const stamp = Date.now();
 const ids: string[] = [];
-
-async function seed(email: string, role: "maker" | "approver" | "admin") {
-  const repos = createRepositories(db);
-  const u = await repos.users.create({
-    email,
-    passwordHash: await hashPassword("a-strong-password"),
-    displayName: role,
-    role,
-  });
-  ids.push(u.id);
-  return u.id;
-}
-
-function jar(setCookies: string[]) {
-  const parts = setCookies.map((c) => c.split(";")[0]!);
-  const csrf = parts.find((c) => c.startsWith("csrf_token="))!.split("=")[1]!;
-  return { cookie: parts.join("; "), csrf };
-}
-
-async function login(app: ReturnType<typeof createApp>, email: string) {
-  const res = await app.request("/api/v1/auth/login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: "a-strong-password" }),
-  });
-  return jar(res.headers.getSetCookie());
-}
 
 type MockInvoice = {
   id: string;
@@ -123,25 +86,26 @@ async function seedTestKey(): Promise<void> {
   const repos = createRepositories(db);
   const admin = await repos.users.create({
     email: `inv-key-admin-${stamp}@example.com`,
-    passwordHash: await hashPassword("a-strong-password"),
     displayName: "key admin",
     role: "admin",
   });
   ids.push(admin.id);
   const settingsModule = await import("../../src/modules/settings/settings.service");
-  const settings = new settingsModule.SettingsService(repos, baseConfig.keyEncryptionKey);
+  const settings = new settingsModule.SettingsService(repos, testConfig().keyEncryptionKey);
   const adminPublic = { id: admin.id, email: admin.email, displayName: admin.displayName, role: admin.role, isActive: true };
   await settings.setKey(adminPublic, "test", `sk_test_${stamp}_invkey`, { ip: null });
 }
 
 async function makerApproverSubmitFlow(
-  app: ReturnType<typeof createApp>,
-  container: ReturnType<typeof createContainer>,
+  app: ReturnType<typeof makeApp>["app"],
+  container: ReturnType<typeof makeApp>["container"],
   makerEmail: string,
   approverEmail: string,
-): Promise<string> {
-  const maker = await login(app, makerEmail);
-  const approver = await login(app, approverEmail);
+): Promise<{ batchId: string; makerCookie: string; makerCsrf: string; approverCookie: string; approverCsrf: string }> {
+  const maker = await loginAs(app, { email: makerEmail, role: "maker" });
+  ids.push(maker.userId);
+  const approver = await loginAs(app, { email: approverEmail, role: "approver" });
+  ids.push(approver.userId);
 
   const created = await app.request("/api/v1/batches", {
     method: "POST",
@@ -187,33 +151,41 @@ async function makerApproverSubmitFlow(
     expect(item.moyasarStatus).toBe("initiated");
   }
 
-  return batchId;
+  return {
+    batchId,
+    makerCookie: maker.cookie,
+    makerCsrf: maker.csrf,
+    approverCookie: approver.cookie,
+    approverCsrf: approver.csrf,
+  };
 }
 
 describe("invoices explorer, cancel, and per-batch refresh (mock Moyasar)", () => {
   const store = new Map<string, MockInvoice>();
-  let container: ReturnType<typeof createContainer>;
-  let app: ReturnType<typeof createApp>;
+  let app: ReturnType<typeof makeApp>["app"];
   let batchId: string;
-  let makerEmail: string;
-  let approverEmail: string;
+  let makerCookie: string;
+  let makerCsrf: string;
+  let approverCookie: string;
+  let approverCsrf: string;
 
   beforeAll(async () => {
     await seedTestKey();
-    makerEmail = `inv-maker-${stamp}@example.com`;
-    approverEmail = `inv-approver-${stamp}@example.com`;
-    await seed(makerEmail, "maker");
-    await seed(approverEmail, "approver");
+    const makerEmail = `inv-maker-${stamp}@example.com`;
+    const approverEmail = `inv-approver-${stamp}@example.com`;
 
-    container = createContainer(db, baseConfig, makeMockFetch(store));
-    app = createApp(container);
+    const built = makeApp(db, { moyasarFetch: makeMockFetch(store) });
+    app = built.app;
 
-    batchId = await makerApproverSubmitFlow(app, container, makerEmail, approverEmail);
+    ({ batchId, makerCookie, makerCsrf, approverCookie, approverCsrf } = await makerApproverSubmitFlow(
+      built.app,
+      built.container,
+      makerEmail,
+      approverEmail,
+    ));
   });
 
   test("refresh reconciles a paid invoice and it shows in the explorer", async () => {
-    const maker = await login(app, makerEmail);
-
     // Flip one of the two mock invoices to "paid" (simulating an upstream status change).
     const batchInvoices = [...store.values()].filter((inv) => inv.metadata.platform_batch_id === batchId);
     expect(batchInvoices.length).toBe(2);
@@ -221,13 +193,13 @@ describe("invoices explorer, cancel, and per-batch refresh (mock Moyasar)", () =
 
     const refreshed = await app.request(`/api/v1/batches/${batchId}/refresh`, {
       method: "POST",
-      headers: { cookie: maker.cookie, "x-csrf-token": maker.csrf },
+      headers: { cookie: makerCookie, "x-csrf-token": makerCsrf },
     });
     expect(refreshed.status).toBe(200);
     expect(await refreshed.json()).toEqual({ updated: 1 });
 
     const paidList = await app.request("/api/v1/invoices?status=paid", {
-      headers: { cookie: maker.cookie },
+      headers: { cookie: makerCookie },
     });
     expect(paidList.status).toBe(200);
     const paidBody = await paidList.json();
@@ -237,8 +209,6 @@ describe("invoices explorer, cancel, and per-batch refresh (mock Moyasar)", () =
   });
 
   test("approver cancels a still-initiated invoice; a second cancel conflicts", async () => {
-    const approver = await login(app, approverEmail);
-
     const stillInitiated = [...store.values()].find(
       (inv) => inv.metadata.platform_batch_id === batchId && inv.status === "initiated",
     );
@@ -246,7 +216,7 @@ describe("invoices explorer, cancel, and per-batch refresh (mock Moyasar)", () =
 
     const canceled = await app.request(`/api/v1/invoices/${stillInitiated!.id}/cancel`, {
       method: "POST",
-      headers: { cookie: approver.cookie, "x-csrf-token": approver.csrf },
+      headers: { cookie: approverCookie, "x-csrf-token": approverCsrf },
     });
     expect(canceled.status).toBe(200);
     const canceledBody = await canceled.json();
@@ -254,29 +224,25 @@ describe("invoices explorer, cancel, and per-batch refresh (mock Moyasar)", () =
 
     const secondCancel = await app.request(`/api/v1/invoices/${stillInitiated!.id}/cancel`, {
       method: "POST",
-      headers: { cookie: approver.cookie, "x-csrf-token": approver.csrf },
+      headers: { cookie: approverCookie, "x-csrf-token": approverCsrf },
     });
     expect(secondCancel.status).toBe(409);
   });
 
   test("a maker cannot cancel an invoice", async () => {
-    const maker = await login(app, makerEmail);
-
     const anyInvoice = [...store.values()].find((inv) => inv.metadata.platform_batch_id === batchId);
     expect(anyInvoice).toBeDefined();
 
     const res = await app.request(`/api/v1/invoices/${anyInvoice!.id}/cancel`, {
       method: "POST",
-      headers: { cookie: maker.cookie, "x-csrf-token": maker.csrf },
+      headers: { cookie: makerCookie },
     });
     expect(res.status).toBe(403);
   });
 
   test("GET /api/v1/invoices returns the local mirror with pagination meta", async () => {
-    const maker = await login(app, makerEmail);
-
     const res = await app.request(`/api/v1/invoices?batchId=${batchId}&page=1&perPage=25`, {
-      headers: { cookie: maker.cookie },
+      headers: { cookie: makerCookie },
     });
     expect(res.status).toBe(200);
     const body = await res.json();

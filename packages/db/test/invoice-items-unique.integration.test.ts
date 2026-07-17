@@ -10,7 +10,7 @@ const db = createDb(url);
 test("duplicate (batch_id, row_number) is rejected", async () => {
   const [u] = await db
     .insert(users)
-    .values({ email: `uniq-${Date.now()}@example.com`, passwordHash: "x", displayName: "U", role: "maker" })
+    .values({ email: `uniq-${Date.now()}@example.com`, displayName: "U", role: "maker" })
     .returning();
   const [b] = await db
     .insert(invoiceBatches)

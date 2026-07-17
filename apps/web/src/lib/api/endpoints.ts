@@ -2,7 +2,6 @@ import type {
   CreateBatchInput,
   CreateUserInput,
   InvoiceItemInput,
-  LoginInput,
   UpdateUserInput,
 } from "@moyasar-ops/shared";
 import { apiFetch } from "./client";
@@ -25,8 +24,7 @@ const qs = (o: Record<string, string | number | undefined>) => {
 
 export const api = {
   auth: {
-    login: (b: LoginInput) =>
-      apiFetch<{ user: PublicUser }>("/auth/login", { method: "POST", body: b }),
+    // Login is a full-page redirect to the API's OIDC handler, not a fetch.
     logout: () => apiFetch<void>("/auth/logout", { method: "POST" }),
     me: () => apiFetch<{ user: PublicUser }>("/me"),
   },

@@ -1,56 +1,26 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { createDb, createRepositories, invoiceBatches, invoiceItems, jobs, sessions } from "@moyasar-ops/db";
+import { invoiceBatches, invoiceItems, jobs, sessions } from "@moyasar-ops/db";
 import { eq, inArray, sql } from "drizzle-orm";
-import { createApp } from "../../src/app";
-import { loadConfig } from "../../src/config";
-import { createContainer } from "../../src/container";
-import { hashPassword } from "../../src/modules/auth/password";
+import { loginAs, makeTestApp } from "../support/auth";
 
-const url = process.env.DATABASE_URL ?? "postgres://moyasar_ops:dev_password@localhost:5433/moyasar_ops";
-const db = createDb(url);
-const config = {
-  ...loadConfig({
-    DATABASE_URL: url,
-    KEY_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
-  } as NodeJS.ProcessEnv),
-  cookieSecure: false,
-};
-const app = createApp(createContainer(db, config));
+const { app, db } = makeTestApp();
 
 const stamp = Date.now();
 const makerEmail = `bf-maker-${stamp}@example.com`;
 const approverEmail = `bf-approver-${stamp}@example.com`;
 const ids: string[] = [];
 
-async function seed(email: string, role: "maker" | "approver") {
-  const repos = createRepositories(db);
-  const u = await repos.users.create({ email, passwordHash: await hashPassword("a-strong-password"), displayName: role, role });
-  ids.push(u.id);
-  return u.id;
-}
-function jar(setCookies: string[]) {
-  const parts = setCookies.map((c) => c.split(";")[0]!);
-  const csrf = parts.find((c) => c.startsWith("csrf_token="))!.split("=")[1]!;
-  return { cookie: parts.join("; "), csrf };
-}
-async function login(email: string) {
-  const res = await app.request("/api/v1/auth/login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: "a-strong-password" }),
-  });
-  return jar(res.headers.getSetCookie());
-}
+let maker: { cookie: string; csrf: string; userId: string };
+let approver: { cookie: string; csrf: string; userId: string };
 
 beforeAll(async () => {
-  await seed(makerEmail, "maker");
-  await seed(approverEmail, "approver");
+  maker = await loginAs(app, { email: makerEmail, role: "maker" });
+  ids.push(maker.userId);
+  approver = await loginAs(app, { email: approverEmail, role: "approver" });
+  ids.push(approver.userId);
 });
 
 test("maker creates+fills a batch, submits; approver approves; self-approval is blocked", async () => {
-  const maker = await login(makerEmail);
-  const approver = await login(approverEmail);
-
   // Create
   const created = await app.request("/api/v1/batches", {
     method: "POST",
@@ -102,7 +72,6 @@ test("maker creates+fills a batch, submits; approver approves; self-approval is 
 });
 
 test("CSV upload validates rows and blocks submission until fixed", async () => {
-  const maker = await login(makerEmail);
   const created = await app.request("/api/v1/batches", {
     method: "POST",
     headers: { cookie: maker.cookie, "content-type": "application/json", "x-csrf-token": maker.csrf },

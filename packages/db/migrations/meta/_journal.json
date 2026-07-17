@@ -29,6 +29,20 @@
       "when": 1783449681874,
       "tag": "0003_invoice_items_row_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783777598868,
+      "tag": "0004_famous_leopardon",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783782596195,
+      "tag": "0005_salty_mysterio",
+      "breakpoints": true
     }
   ]
 }

@@ -11,7 +11,7 @@ const repos = createRepositories(db);
 test("batches + items repositories create, list, count, and update", async () => {
   const [u] = await db
     .insert(users)
-    .values({ email: `br-${Date.now()}@example.com`, passwordHash: "x", displayName: "BR", role: "maker" })
+    .values({ email: `br-${Date.now()}@example.com`, displayName: "BR", role: "maker" })
     .returning();
 
   const batch = await repos.batches.create({

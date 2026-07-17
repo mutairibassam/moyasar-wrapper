@@ -4,6 +4,7 @@ import { createApp } from "../src/app";
 import { loadConfig } from "../src/config";
 import { createContainer } from "../src/container";
 import { StateTransitionError, ValidationError } from "../src/errors";
+import { FakeOidcClient } from "./support/oidc";
 
 // createDb() only opens a lazy connection (postgres-js does not connect until
 // a query runs), so these tests exercise createApp's routing/error-mapping
@@ -15,10 +16,15 @@ const config = {
   ...loadConfig({
     DATABASE_URL: url,
     KEY_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+    OIDC_ISSUER_URL: "https://idp.test/realms/dev",
+    OIDC_CLIENT_ID: "app",
+    OIDC_CLIENT_SECRET: "secret",
+    OIDC_REDIRECT_URI: "http://localhost/api/v1/auth/callback",
+    APP_ACCESS_GROUP_ID: "grp-app",
   } as NodeJS.ProcessEnv),
   cookieSecure: false,
 };
-const container = createContainer(db, config);
+const container = createContainer(db, config, new FakeOidcClient());
 
 describe("healthz", () => {
   test("returns ok", async () => {

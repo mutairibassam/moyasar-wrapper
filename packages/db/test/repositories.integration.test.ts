@@ -12,7 +12,6 @@ test("users repository creates, finds by email, updates", async () => {
   const email = `repo-${Date.now()}@example.com`;
   const created = await repos.users.create({
     email,
-    passwordHash: "x",
     displayName: "Repo User",
     role: "maker",
   });
@@ -30,7 +29,6 @@ test("transaction commits mutation and audit row together", async () => {
   const userId = await repos.transaction(async (r) => {
     const u = await r.users.create({
       email,
-      passwordHash: "x",
       displayName: "Tx User",
       role: "viewer",
     });
@@ -57,7 +55,7 @@ test("transaction rolls back mutation when the body throws", async () => {
   let threw = false;
   try {
     await repos.transaction(async (r) => {
-      await r.users.create({ email, passwordHash: "x", displayName: "Rollback", role: "viewer" });
+      await r.users.create({ email, displayName: "Rollback", role: "viewer" });
       throw new Error("boom");
     });
   } catch {

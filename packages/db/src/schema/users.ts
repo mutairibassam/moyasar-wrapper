@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -19,9 +20,13 @@ export const userRoleEnum = pgEnum("user_role", [
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().$defaultFn(() => uuidv7()),
   email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
+  entraOid: text("entra_oid").unique(), // nullable at DB level; app always sets it on upsert
+  // Nullable: SSO users have no password. Retained for admin-managed user records
+  // (UsersService); real user-management redesign is deferred to sub-project B.
+  passwordHash: text("password_hash"),
   displayName: text("display_name").notNull(),
   role: userRoleEnum("role").notNull(),
+  groupsSnapshot: jsonb("groups_snapshot").$type<string[]>().notNull().default([]),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
